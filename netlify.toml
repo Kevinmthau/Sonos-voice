@@ -1,0 +1,17 @@
+[build]
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/sonos/oauth/start"
+  to = "/.netlify/functions/sonos-auth-start"
+  status = 200
+
+[[redirects]]
+  from = "/sonos/oauth/callback"
+  to = "/.netlify/functions/sonos-auth-callback"
+  status = 200
+
+[[redirects]]
+  from = "/sonos/events"
+  to = "/.netlify/functions/sonos-events"
+  status = 200
