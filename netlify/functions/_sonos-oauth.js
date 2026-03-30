@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const DEFAULT_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
 const DEFAULT_REDIRECT_URI = "https://mushpot.net/sonos/oauth/callback";
 const DEFAULT_IOS_CALLBACK_URL = "sonosvoiceremote://oauth/callback";
+const DEFAULT_WEB_CALLBACK_URL = "/oauth/callback";
 const SONOS_AUTHORIZE_URL = "https://api.sonos.com/login/v3/oauth";
 const SONOS_TOKEN_URL = "https://api.sonos.com/login/v3/oauth/access";
 const SONOS_SCOPE = "playback-control-all";
@@ -116,6 +117,10 @@ function appCallbackURL() {
   return optionalEnv("SONOS_IOS_CALLBACK_URL", DEFAULT_IOS_CALLBACK_URL);
 }
 
+function webCallbackURL() {
+  return optionalEnv("SONOS_WEB_CALLBACK_URL", DEFAULT_WEB_CALLBACK_URL);
+}
+
 function redirectResponse(location) {
   return {
     statusCode: 302,
@@ -144,5 +149,6 @@ module.exports = {
   exchangeAuthorizationCode,
   optionalEnv,
   redirectResponse,
-  verifySignedState
+  verifySignedState,
+  webCallbackURL
 };
