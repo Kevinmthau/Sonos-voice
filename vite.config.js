@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/sonos/',
   build: {
-    outDir: 'dist',
+    outDir: 'dist/sonos',
   },
   server: {
     proxy: {
