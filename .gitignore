@@ -4,3 +4,7 @@ build/
 *.xcuserstate
 xcuserdata/
 .env
+
+# Web app
+node_modules/
+dist/

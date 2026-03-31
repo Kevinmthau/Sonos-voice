@@ -1,6 +1,20 @@
 [build]
+  command = "npm run build"
+  publish = "dist"
   functions = "netlify/functions"
 
+# Web OAuth flow
+[[redirects]]
+  from = "/sonos/oauth/start/web"
+  to = "/.netlify/functions/sonos-auth-start-web"
+  status = 200
+
+[[redirects]]
+  from = "/sonos/oauth/callback/web"
+  to = "/.netlify/functions/sonos-auth-callback-web"
+  status = 200
+
+# iOS OAuth flow (preserved)
 [[redirects]]
   from = "/sonos/oauth/start"
   to = "/.netlify/functions/sonos-auth-start"
@@ -11,7 +25,20 @@
   to = "/.netlify/functions/sonos-auth-callback"
   status = 200
 
+# Sonos events webhook
 [[redirects]]
   from = "/sonos/events"
   to = "/.netlify/functions/sonos-events"
+  status = 200
+
+# Sonos API proxy
+[[redirects]]
+  from = "/api/sonos"
+  to = "/.netlify/functions/sonos-proxy"
+  status = 200
+
+# SPA fallback — serve index.html for all unmatched routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
