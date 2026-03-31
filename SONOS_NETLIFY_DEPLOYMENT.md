@@ -1,14 +1,14 @@
 # Sonos + Netlify Deployment Checklist
 
-This document wires the `SonosVoiceRemote` app to `mushpot.net` using Netlify Functions as the Sonos OAuth broker.
+This document wires the `SonosVoiceRemote` app to `sonos-voice.netlify.app` using Netlify Functions as the Sonos OAuth broker.
 
 ## 1. Sonos Developer Portal
 
 Create or update your integration key with these exact values:
 
-- Key Name: `SonosVoiceRemote iOS - mushpot.net`
-- Redirect URI: `https://mushpot.net/sonos/oauth/callback`
-- Event Callback URL: `https://mushpot.net/sonos/events`
+- Key Name: `SonosVoiceRemote iOS - sonos-voice.netlify.app`
+- Redirect URI: `https://sonos-voice.netlify.app/sonos/oauth/callback`
+- Event Callback URL: `https://sonos-voice.netlify.app/sonos/events`
 
 Notes:
 
@@ -28,21 +28,21 @@ These files are already in this repo:
 
 Important:
 
-- These files must be deployed by the Netlify site that actually serves `mushpot.net`.
-- If `mushpot.net` uses a different repo, copy `netlify.toml` and the `netlify/functions` folder into that repo.
+- These files must be deployed by the Netlify site that actually serves `sonos-voice.netlify.app`.
+- If `sonos-voice.netlify.app` uses a different repo, copy `netlify.toml` and the `netlify/functions` folder into that repo.
 
 ## 3. Netlify Environment Variables
 
 In Netlify:
 
-1. Open the `mushpot.net` site.
+1. Open the `sonos-voice.netlify.app` site.
 2. Go to `Site configuration` -> `Environment variables`.
 3. Add:
 
 - `SONOS_CLIENT_ID`
 - `SONOS_CLIENT_SECRET`
 - `SONOS_STATE_SECRET`
-- `SONOS_REDIRECT_URI=https://mushpot.net/sonos/oauth/callback`
+- `SONOS_REDIRECT_URI=https://sonos-voice.netlify.app/sonos/oauth/callback`
 - `SONOS_IOS_CALLBACK_URL=sonosvoiceremote://oauth/callback`
 
 Recommended:
@@ -55,9 +55,9 @@ Recommended:
 
 After deploy, these routes should exist:
 
-- `https://mushpot.net/sonos/oauth/start`
-- `https://mushpot.net/sonos/oauth/callback`
-- `https://mushpot.net/sonos/events`
+- `https://sonos-voice.netlify.app/sonos/oauth/start`
+- `https://sonos-voice.netlify.app/sonos/oauth/callback`
+- `https://sonos-voice.netlify.app/sonos/events`
 
 Expected behavior:
 
@@ -77,7 +77,7 @@ The real controller defaults are already set in:
 
 Defaults already baked into the app:
 
-- Auth start URL: `https://mushpot.net/sonos/oauth/start`
+- Auth start URL: `https://sonos-voice.netlify.app/sonos/oauth/start`
 - iOS callback URL: `sonosvoiceremote://oauth/callback`
 
 Optional overrides if you need them:
@@ -89,8 +89,8 @@ Optional overrides if you need them:
 
 ## 6. Deploy Order
 
-1. Deploy the Netlify site serving `mushpot.net`.
-2. Verify `https://mushpot.net/sonos/oauth/start` returns a redirect.
+1. Deploy the Netlify site serving `sonos-voice.netlify.app`.
+2. Verify `https://sonos-voice.netlify.app/sonos/oauth/start` returns a redirect.
 3. Save the Sonos integration key with the redirect URI and event callback URL above.
 4. Build and run the iPhone app.
 5. Tap `Sign In` in the Sonos controller card.
@@ -103,8 +103,8 @@ Optional overrides if you need them:
 Validate Netlify routes:
 
 ```bash
-curl -I https://mushpot.net/sonos/oauth/start
-curl -i https://mushpot.net/sonos/events
+curl -I https://sonos-voice.netlify.app/sonos/oauth/start
+curl -i https://sonos-voice.netlify.app/sonos/events
 ```
 
 Expected:
@@ -116,7 +116,7 @@ Expected:
 
 If Sonos rejects the redirect URI:
 
-- Confirm Sonos portal uses exactly `https://mushpot.net/sonos/oauth/callback`
+- Confirm Sonos portal uses exactly `https://sonos-voice.netlify.app/sonos/oauth/callback`
 - Confirm Netlify deploy is live on the same domain
 
 If the app never comes back from the browser:

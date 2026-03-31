@@ -18,7 +18,7 @@ struct RealSonosConfiguration {
         let environment = ProcessInfo.processInfo.environment
         let defaultControlBaseURL = URL(string: "https://api.ws.sonos.com/control/api/v1")!
         let defaultAuthTokenURL = URL(string: "https://api.sonos.com/login/v3/oauth/access")!
-        let defaultAuthorizationStartURL = URL(string: "https://mushpot.net/sonos/oauth/start")
+        let defaultAuthorizationStartURL = URL(string: "https://sonos-voice.netlify.app/sonos/oauth/start")
         let defaultIOSCallbackURL = URL(string: "sonosvoiceremote://oauth/callback")!
 
         let controlBaseURL = environment["SONOS_CONTROL_API_BASE_URL"]

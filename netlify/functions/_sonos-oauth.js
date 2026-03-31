@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 
 const DEFAULT_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
-const DEFAULT_REDIRECT_URI = "https://mushpot.net/sonos/oauth/callback";
+const DEFAULT_REDIRECT_URI = "https://sonos-voice.netlify.app/sonos/oauth/callback";
 const DEFAULT_IOS_CALLBACK_URL = "sonosvoiceremote://oauth/callback";
 const DEFAULT_WEB_CALLBACK_URL = "/sonos";
 const SONOS_AUTHORIZE_URL = "https://api.sonos.com/login/v3/oauth";
