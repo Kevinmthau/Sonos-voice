@@ -37,8 +37,8 @@
   to = "/.netlify/functions/sonos-proxy"
   status = 200
 
-# SPA fallback — serve index.html for all unmatched routes
+# SPA fallback for the Sonos app (don't override the site root)
 [[redirects]]
-  from = "/*"
-  to = "/index.html"
+  from = "/sonos/*"
+  to = "/sonos/index.html"
   status = 200
