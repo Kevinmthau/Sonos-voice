@@ -17,7 +17,7 @@ exports.handler = async function handler(event) {
       return redirectResponse(callbackURL.toString());
     }
 
-    verifySignedState(query.state, env("SONOS_STATE_SECRET"));
+    const statePayload = verifySignedState(query.state, env("SONOS_STATE_SECRET"));
 
     if (!query.code) {
       const callbackURL = new URL(webCallbackURL(), `https://${event.headers.host}`);
@@ -26,7 +26,7 @@ exports.handler = async function handler(event) {
       return redirectResponse(callbackURL.toString());
     }
 
-    const tokenResponse = await exchangeAuthorizationCode(query.code);
+    const tokenResponse = await exchangeAuthorizationCode(query.code, statePayload.redirectURI);
     const callbackURL = new URL(webCallbackURL(), `https://${event.headers.host}`);
     callbackURL.searchParams.set("access_token", tokenResponse.access_token);
     if (tokenResponse.refresh_token) {
