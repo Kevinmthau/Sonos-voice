@@ -1,6 +1,6 @@
 # Sonos + Netlify Deployment Checklist
 
-This document wires the `SonosVoiceRemote` app to `sonos-voice.netlify.app` using Netlify Functions as the Sonos OAuth broker.
+This document wires the `SonosVoiceRemote` app to `https://sonos-voice.netlify.app/` using Netlify Functions as the Sonos OAuth broker.
 
 ## 1. Sonos Developer Portal
 
@@ -55,15 +55,18 @@ Recommended:
 
 After deploy, these routes should exist:
 
+- `https://sonos-voice.netlify.app/`
 - `https://sonos-voice.netlify.app/sonos/oauth/start`
 - `https://sonos-voice.netlify.app/sonos/oauth/callback`
 - `https://sonos-voice.netlify.app/sonos/events`
 
 Expected behavior:
 
+- `/` serves the web controller SPA.
 - `/sonos/oauth/start` redirects to Sonos login.
 - `/sonos/oauth/callback` exchanges the Sonos auth code for tokens and redirects into the iPhone app.
 - `/sonos/events` returns `200 OK` and can later be expanded to verify/store Sonos events.
+- Legacy `/sonos` app URLs redirect to `/`.
 
 ## 5. iOS App Configuration
 
@@ -90,7 +93,7 @@ Optional overrides if you need them:
 ## 6. Deploy Order
 
 1. Deploy the Netlify site serving `sonos-voice.netlify.app`.
-2. Verify `https://sonos-voice.netlify.app/sonos/oauth/start` returns a redirect.
+2. Verify `https://sonos-voice.netlify.app/` loads the app and `https://sonos-voice.netlify.app/sonos/oauth/start` returns a redirect.
 3. Save the Sonos integration key with the redirect URI and event callback URL above.
 4. Build and run the iPhone app.
 5. Tap `Sign In` in the Sonos controller card.
@@ -103,12 +106,14 @@ Optional overrides if you need them:
 Validate Netlify routes:
 
 ```bash
+curl -I https://sonos-voice.netlify.app/
 curl -I https://sonos-voice.netlify.app/sonos/oauth/start
 curl -i https://sonos-voice.netlify.app/sonos/events
 ```
 
 Expected:
 
+- `/` should return `200`.
 - `/sonos/oauth/start` should return `302`.
 - `/sonos/events` should return `200`.
 

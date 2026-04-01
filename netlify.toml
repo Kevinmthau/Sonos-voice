@@ -37,8 +37,19 @@
   to = "/.netlify/functions/sonos-proxy"
   status = 200
 
-# SPA fallback for the Sonos app (don't override the site root)
+# Legacy app path compatibility
+[[redirects]]
+  from = "/sonos"
+  to = "/"
+  status = 301
+
 [[redirects]]
   from = "/sonos/*"
-  to = "/sonos/index.html"
+  to = "/:splat"
+  status = 301
+
+# SPA fallback for the Sonos app at the site root
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
   status = 200
