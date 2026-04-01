@@ -50,6 +50,7 @@ Recommended:
 - Generate `SONOS_STATE_SECRET` as a long random string, at least 32 bytes of entropy.
 - Do not expose `SONOS_CLIENT_SECRET` in client-side code.
 - This repo already bakes in your current Sonos client ID as a default, but keeping `SONOS_CLIENT_ID` set in Netlify is still cleaner and easier to rotate later.
+- The web controller now defaults to the same registered Sonos redirect URI as iOS. You only need `SONOS_WEB_REDIRECT_URI` if you explicitly register a second web-specific callback URL with Sonos.
 
 ## 4. Netlify Routing
 

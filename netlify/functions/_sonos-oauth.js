@@ -33,10 +33,11 @@ function base64url(value) {
     .replace(/=+$/g, "");
 }
 
-function createSignedState(secret) {
+function createSignedState(secret, extraPayload = {}) {
   const payload = {
     nonce: crypto.randomBytes(16).toString("hex"),
-    issuedAt: Date.now()
+    issuedAt: Date.now(),
+    ...extraPayload
   };
   const encodedPayload = base64url(JSON.stringify(payload));
   const signature = base64url(crypto.createHmac("sha256", secret).update(encodedPayload).digest());
@@ -68,11 +69,11 @@ function verifySignedState(state, secret) {
   return payload;
 }
 
-function createAuthorizeURL() {
+function createAuthorizeURL(options = {}) {
   const clientID = optionalEnv("SONOS_CLIENT_ID", DEFAULT_CLIENT_ID);
-  const redirectURI = optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
+  const redirectURI = options.redirectURI || optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
   const stateSecret = env("SONOS_STATE_SECRET");
-  const state = createSignedState(stateSecret);
+  const state = createSignedState(stateSecret, options.statePayload);
 
   const url = new URL(SONOS_AUTHORIZE_URL);
   url.searchParams.set("client_id", clientID);
@@ -83,10 +84,10 @@ function createAuthorizeURL() {
   return url.toString();
 }
 
-async function exchangeAuthorizationCode(code) {
+async function exchangeAuthorizationCode(code, redirectURIOverride) {
   const clientID = optionalEnv("SONOS_CLIENT_ID", DEFAULT_CLIENT_ID);
   const clientSecret = env("SONOS_CLIENT_SECRET");
-  const redirectURI = optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
+  const redirectURI = redirectURIOverride || optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
 
   const credentials = Buffer.from(`${clientID}:${clientSecret}`, "utf8").toString("base64");
   const body = new URLSearchParams({
@@ -144,6 +145,7 @@ module.exports = {
   DEFAULT_REDIRECT_URI,
   appCallbackURL,
   createAuthorizeURL,
+  createSignedState,
   env,
   errorRedirect,
   exchangeAuthorizationCode,
