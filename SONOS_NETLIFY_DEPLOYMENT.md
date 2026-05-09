@@ -44,11 +44,13 @@ In Netlify:
 - `SONOS_STATE_SECRET`
 - `SONOS_REDIRECT_URI=https://sonos-voice.netlify.app/sonos/oauth/callback`
 - `SONOS_IOS_CALLBACK_URL=sonosvoiceremote://oauth/callback`
+- `OPENAI_API_KEY` if you enable OpenAI transcription mode
 
 Recommended:
 
 - Generate `SONOS_STATE_SECRET` as a long random string, at least 32 bytes of entropy.
 - Do not expose `SONOS_CLIENT_SECRET` in client-side code.
+- Do not expose `OPENAI_API_KEY` in client-side code; the iOS app sends audio to the Netlify function at `/api/transcribe`.
 - This repo already bakes in your current Sonos client ID as a default, but keeping `SONOS_CLIENT_ID` set in Netlify is still cleaner and easier to rotate later.
 - The web controller now defaults to the same registered Sonos redirect URI as iOS. You only need `SONOS_WEB_REDIRECT_URI` if you explicitly register a second web-specific callback URL with Sonos.
 
@@ -60,6 +62,7 @@ After deploy, these routes should exist:
 - `https://sonos-voice.netlify.app/sonos/oauth/start`
 - `https://sonos-voice.netlify.app/sonos/oauth/callback`
 - `https://sonos-voice.netlify.app/sonos/events`
+- `https://sonos-voice.netlify.app/api/transcribe`
 
 Expected behavior:
 
@@ -67,6 +70,7 @@ Expected behavior:
 - `/sonos/oauth/start` redirects to Sonos login.
 - `/sonos/oauth/callback` exchanges the Sonos auth code for tokens and redirects into the iPhone app.
 - `/sonos/events` returns `200 OK` and can later be expanded to verify/store Sonos events.
+- `/api/transcribe` accepts short command audio and transcribes it through OpenAI when cloud transcription is enabled.
 - Legacy `/sonos` app URLs redirect to `/`.
 
 ## 5. iOS App Configuration
@@ -90,6 +94,8 @@ Optional overrides if you need them:
 - `SONOS_IOS_CALLBACK_URL`
 - `SONOS_CONTROL_API_BASE_URL`
 - `SONOS_HOUSEHOLD_ID`
+- `SONOS_VOICE_TRANSCRIPTION_MODE=apple|openai|auto`
+- `SONOS_OPENAI_TRANSCRIPTION_URL`
 
 ## 6. Deploy Order
 

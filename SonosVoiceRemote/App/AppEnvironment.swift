@@ -11,7 +11,12 @@ enum AppEnvironment {
     }
 
     static func makeSpeechRecognizer() -> any SpeechRecognizing {
-        SpeechRecognizerService()
+        let configuration = VoiceTranscriptionConfiguration.fromEnvironment()
+        return ConfiguredVoiceTranscriber(
+            configuration: configuration,
+            appleTranscriber: SpeechRecognizerService(),
+            openAITranscriber: OpenAITranscriptionService(endpointURL: configuration.openAITranscriptionURL)
+        )
     }
 
     static func makeSonosController() -> any SonosControlling {

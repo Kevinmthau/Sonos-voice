@@ -16,6 +16,9 @@
 		300000000000000000000007 /* ParsedVoiceIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000007 /* ParsedVoiceIntent.swift */; };
 		300000000000000000000008 /* SpeechRecognizing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000008 /* SpeechRecognizing.swift */; };
 		300000000000000000000009 /* SpeechRecognizerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000009 /* SpeechRecognizerService.swift */; };
+		300000000000000000000017 /* VoiceTranscriptionConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000019 /* VoiceTranscriptionConfiguration.swift */; };
+		300000000000000000000018 /* OpenAITranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* OpenAITranscriptionService.swift */; };
+		300000000000000000000019 /* ConfiguredVoiceTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* ConfiguredVoiceTranscriber.swift */; };
 		300000000000000000000010 /* SonosControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* SonosControlling.swift */; };
 		300000000000000000000012 /* RealSonosController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* RealSonosController.swift */; };
 		300000000000000000000013 /* IntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* IntentParser.swift */; };
@@ -44,6 +47,9 @@
 		200000000000000000000007 /* ParsedVoiceIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParsedVoiceIntent.swift; sourceTree = "<group>"; };
 		200000000000000000000008 /* SpeechRecognizing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizing.swift; sourceTree = "<group>"; };
 		200000000000000000000009 /* SpeechRecognizerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizerService.swift; sourceTree = "<group>"; };
+		200000000000000000000019 /* VoiceTranscriptionConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTranscriptionConfiguration.swift; sourceTree = "<group>"; };
+		200000000000000000000020 /* OpenAITranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAITranscriptionService.swift; sourceTree = "<group>"; };
+		200000000000000000000021 /* ConfiguredVoiceTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiguredVoiceTranscriber.swift; sourceTree = "<group>"; };
 		200000000000000000000010 /* SonosControlling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosControlling.swift; sourceTree = "<group>"; };
 		200000000000000000000012 /* RealSonosController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealSonosController.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* IntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentParser.swift; sourceTree = "<group>"; };
@@ -178,6 +184,9 @@
 			children = (
 				200000000000000000000008 /* SpeechRecognizing.swift */,
 				200000000000000000000009 /* SpeechRecognizerService.swift */,
+				200000000000000000000019 /* VoiceTranscriptionConfiguration.swift */,
+				200000000000000000000020 /* OpenAITranscriptionService.swift */,
+				200000000000000000000021 /* ConfiguredVoiceTranscriber.swift */,
 			);
 			path = Speech;
 			sourceTree = "<group>";
@@ -298,6 +307,9 @@
 				300000000000000000000007 /* ParsedVoiceIntent.swift in Sources */,
 				300000000000000000000008 /* SpeechRecognizing.swift in Sources */,
 				300000000000000000000009 /* SpeechRecognizerService.swift in Sources */,
+				300000000000000000000017 /* VoiceTranscriptionConfiguration.swift in Sources */,
+				300000000000000000000018 /* OpenAITranscriptionService.swift in Sources */,
+				300000000000000000000019 /* ConfiguredVoiceTranscriber.swift in Sources */,
 				300000000000000000000010 /* SonosControlling.swift in Sources */,
 				300000000000000000000012 /* RealSonosController.swift in Sources */,
 				300000000000000000000013 /* IntentParser.swift in Sources */,

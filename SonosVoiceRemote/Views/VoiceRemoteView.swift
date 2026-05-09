@@ -221,7 +221,7 @@ struct VoiceRemoteView: View {
                     .font(.system(.headline, design: .rounded))
                     .foregroundStyle(.white)
 
-                Text(viewModel.permissionState.statusMessage)
+                Text(viewModel.transcriptionSummaryText)
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(Color.white.opacity(0.68))
                     .multilineTextAlignment(.center)

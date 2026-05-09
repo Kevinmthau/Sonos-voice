@@ -9,6 +9,14 @@ final class SpeechRecognizerService: NSObject, SpeechRecognizing {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
 
+    var sourceDescription: String {
+        "Apple Speech"
+    }
+
+    var usesDeferredTranscription: Bool {
+        false
+    }
+
     init(locale: Locale = Locale(identifier: "en_US")) {
         self.locale = locale
         self.speechRecognizer = SFSpeechRecognizer(locale: locale)
@@ -48,7 +56,7 @@ final class SpeechRecognizerService: NSObject, SpeechRecognizing {
             throw SpeechRecognizerError.recognizerUnavailable
         }
 
-        stopTranscribing()
+        stopRecognition()
 
         let audioSession = AVAudioSession.sharedInstance()
         do {
@@ -73,7 +81,7 @@ final class SpeechRecognizerService: NSObject, SpeechRecognizing {
         do {
             try audioEngine.start()
         } catch {
-            stopTranscribing()
+            stopRecognition()
             throw SpeechRecognizerError.audioSessionFailure("Unable to start recording from the microphone.")
         }
 
@@ -83,13 +91,22 @@ final class SpeechRecognizerService: NSObject, SpeechRecognizing {
             }
 
             if let error {
-                self?.stopTranscribing()
+                self?.stopRecognition()
                 onError(error.localizedDescription)
             }
         }
     }
 
-    func stopTranscribing() {
+    func stopTranscribing() async throws -> String? {
+        stopRecognition()
+        return nil
+    }
+
+    func cancelTranscribing() {
+        stopRecognition()
+    }
+
+    private func stopRecognition() {
         if audioEngine.isRunning {
             audioEngine.stop()
         }

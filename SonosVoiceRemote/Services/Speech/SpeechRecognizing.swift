@@ -1,5 +1,11 @@
 import Foundation
 
+enum SpeechRecognitionMode: String, CaseIterable {
+    case apple
+    case openai
+    case auto
+}
+
 enum SpeechPermissionState: Equatable {
     case unknown
     case granted
@@ -38,11 +44,15 @@ enum SpeechRecognizerError: LocalizedError {
 }
 
 protocol SpeechRecognizing: AnyObject {
+    var sourceDescription: String { get }
+    var usesDeferredTranscription: Bool { get }
+
     func currentPermissionState() async -> SpeechPermissionState
     func requestPermissions() async -> SpeechPermissionState
     func startTranscribing(
         onUpdate: @escaping @Sendable (String) -> Void,
         onError: @escaping @Sendable (String) -> Void
     ) async throws
-    func stopTranscribing()
+    func stopTranscribing() async throws -> String?
+    func cancelTranscribing()
 }

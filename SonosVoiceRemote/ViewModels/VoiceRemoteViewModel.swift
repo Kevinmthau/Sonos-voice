@@ -70,6 +70,10 @@ final class VoiceRemoteViewModel: ObservableObject {
         parsedIntent?.summary ?? "No parsed command yet."
     }
 
+    var transcriptionSummaryText: String {
+        "\(speechRecognizer.sourceDescription). \(permissionState.statusMessage)"
+    }
+
     func loadIfNeeded() async {
         guard !hasLoaded else { return }
         hasLoaded = true
@@ -222,7 +226,7 @@ final class VoiceRemoteViewModel: ObservableObject {
 
         transcript = ""
         parsedIntent = nil
-        statusText = "Listening..."
+        statusText = speechRecognizer.usesDeferredTranscription ? "Recording command..." : "Listening..."
 
         do {
             try await speechRecognizer.startTranscribing(
@@ -240,7 +244,7 @@ final class VoiceRemoteViewModel: ObservableObject {
                 }
             )
             isRecording = true
-            appendLog("Speech recognition started.")
+            appendLog("Speech recognition started with \(speechRecognizer.sourceDescription).")
         } catch {
             statusText = error.localizedDescription
             appendLog("Speech recognition failed: \(error.localizedDescription)")
@@ -248,8 +252,24 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     private func stopRecordingAndExecute() async {
-        speechRecognizer.stopTranscribing()
         isRecording = false
+
+        if speechRecognizer.usesDeferredTranscription {
+            statusText = "Transcribing..."
+        }
+
+        do {
+            if let finalTranscript = try await speechRecognizer.stopTranscribing()?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !finalTranscript.isEmpty {
+                transcript = finalTranscript
+            }
+        } catch {
+            statusText = error.localizedDescription
+            appendLog("Transcription failed: \(error.localizedDescription)")
+            return
+        }
+
         appendLog("Speech recognition stopped.")
 
         let finalTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)

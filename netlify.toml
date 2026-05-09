@@ -37,6 +37,12 @@
   to = "/.netlify/functions/sonos-proxy"
   status = 200
 
+# OpenAI speech-to-text proxy
+[[redirects]]
+  from = "/api/transcribe"
+  to = "/.netlify/functions/openai-transcribe"
+  status = 200
+
 # Legacy app path compatibility
 [[redirects]]
   from = "/sonos"

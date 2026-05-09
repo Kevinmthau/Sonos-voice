@@ -58,9 +58,69 @@ final class VoiceRemoteViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.statusText.contains("Kitchen"))
     }
 
-    private func makeViewModel() -> VoiceRemoteViewModel {
+    func testDeferredTranscriptionExecutesReturnedTranscript() async {
+        let speechRecognizer = TestSpeechRecognizer(
+            stopResult: "set kitchen to 20",
+            usesDeferredTranscription: true
+        )
+        let viewModel = makeViewModel(speechRecognizer: speechRecognizer)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.toggleRecording()
+        await viewModel.toggleRecording()
+
+        let kitchen = viewModel.rooms.first(where: { $0.name == "Kitchen" })
+        XCTAssertEqual(viewModel.transcript, "set kitchen to 20")
+        XCTAssertEqual(viewModel.parsedIntent?.action, .setVolume)
+        XCTAssertEqual(kitchen?.volume, 20)
+        XCTAssertTrue(viewModel.statusText.contains("Kitchen"))
+    }
+
+    func testDeferredTranscriptionFailureDoesNotExecute() async {
+        let speechRecognizer = TestSpeechRecognizer(
+            stopError: SpeechRecognizerError.audioSessionFailure("Cloud transcription unavailable."),
+            usesDeferredTranscription: true
+        )
+        let viewModel = makeViewModel(speechRecognizer: speechRecognizer)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.toggleRecording()
+        await viewModel.toggleRecording()
+
+        XCTAssertNil(viewModel.parsedIntent)
+        XCTAssertEqual(viewModel.statusText, "Cloud transcription unavailable.")
+    }
+
+    func testVoiceTranscriptionConfigurationDefaultsToApple() {
+        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([:])
+
+        XCTAssertEqual(configuration.mode, .apple)
+        XCTAssertEqual(configuration.openAITranscriptionURL, VoiceTranscriptionConfiguration.defaultOpenAITranscriptionURL)
+    }
+
+    func testVoiceTranscriptionConfigurationReadsOpenAISettings() throws {
+        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([
+            "SONOS_VOICE_TRANSCRIPTION_MODE": "openai",
+            "SONOS_OPENAI_TRANSCRIPTION_URL": "https://example.com/api/transcribe"
+        ])
+
+        XCTAssertEqual(configuration.mode, .openai)
+        XCTAssertEqual(configuration.openAITranscriptionURL, try XCTUnwrap(URL(string: "https://example.com/api/transcribe")))
+    }
+
+    func testVoiceTranscriptionConfigurationFallsBackForInvalidMode() {
+        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([
+            "SONOS_VOICE_TRANSCRIPTION_MODE": "unknown"
+        ])
+
+        XCTAssertEqual(configuration.mode, .apple)
+    }
+
+    private func makeViewModel(
+        speechRecognizer: any SpeechRecognizing = TestSpeechRecognizer()
+    ) -> VoiceRemoteViewModel {
         VoiceRemoteViewModel(
-            speechRecognizer: TestSpeechRecognizer(),
+            speechRecognizer: speechRecognizer,
             sonosController: TestSonosController(),
             intentParser: IntentParser()
         )
@@ -68,12 +128,32 @@ final class VoiceRemoteViewModelTests: XCTestCase {
 }
 
 private final class TestSpeechRecognizer: SpeechRecognizing {
+    let sourceDescription: String
+    let usesDeferredTranscription: Bool
+    private let permissionState: SpeechPermissionState
+    private let stopResult: String?
+    private let stopError: Error?
+
+    init(
+        sourceDescription: String = "Test speech",
+        permissionState: SpeechPermissionState = .granted,
+        stopResult: String? = nil,
+        stopError: Error? = nil,
+        usesDeferredTranscription: Bool = false
+    ) {
+        self.sourceDescription = sourceDescription
+        self.permissionState = permissionState
+        self.stopResult = stopResult
+        self.stopError = stopError
+        self.usesDeferredTranscription = usesDeferredTranscription
+    }
+
     func currentPermissionState() async -> SpeechPermissionState {
-        .granted
+        permissionState
     }
 
     func requestPermissions() async -> SpeechPermissionState {
-        .granted
+        permissionState
     }
 
     func startTranscribing(
@@ -81,7 +161,15 @@ private final class TestSpeechRecognizer: SpeechRecognizing {
         onError: @escaping @Sendable (String) -> Void
     ) async throws { }
 
-    func stopTranscribing() { }
+    func stopTranscribing() async throws -> String? {
+        if let stopError {
+            throw stopError
+        }
+
+        return stopResult
+    }
+
+    func cancelTranscribing() { }
 }
 
 private actor TestSonosController: SonosControlling {
