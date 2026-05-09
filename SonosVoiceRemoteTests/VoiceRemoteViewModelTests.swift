@@ -91,21 +91,51 @@ final class VoiceRemoteViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.statusText, "Cloud transcription unavailable.")
     }
 
+    func testDeferredTranscriptionBlocksNewRecordingUntilUploadFinishes() async {
+        let speechRecognizer = TestSpeechRecognizer(
+            stopResult: "set kitchen to 20",
+            usesDeferredTranscription: true,
+            stopDelay: .milliseconds(100)
+        )
+        let viewModel = makeViewModel(speechRecognizer: speechRecognizer)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.toggleRecording()
+        XCTAssertEqual(speechRecognizer.startCount, 1)
+
+        let stopTask = Task {
+            await viewModel.toggleRecording()
+        }
+
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertTrue(viewModel.isTranscribing)
+
+        await viewModel.toggleRecording()
+        XCTAssertEqual(speechRecognizer.startCount, 1)
+
+        await stopTask.value
+        XCTAssertFalse(viewModel.isTranscribing)
+        XCTAssertEqual(speechRecognizer.startCount, 1)
+    }
+
     func testVoiceTranscriptionConfigurationDefaultsToApple() {
         let configuration = VoiceTranscriptionConfiguration.fromEnvironment([:])
 
         XCTAssertEqual(configuration.mode, .apple)
         XCTAssertEqual(configuration.openAITranscriptionURL, VoiceTranscriptionConfiguration.defaultOpenAITranscriptionURL)
+        XCTAssertNil(configuration.openAITranscriptionToken)
     }
 
     func testVoiceTranscriptionConfigurationReadsOpenAISettings() throws {
         let configuration = VoiceTranscriptionConfiguration.fromEnvironment([
             "SONOS_VOICE_TRANSCRIPTION_MODE": "openai",
-            "SONOS_OPENAI_TRANSCRIPTION_URL": "https://example.com/api/transcribe"
+            "SONOS_OPENAI_TRANSCRIPTION_URL": "https://example.com/api/transcribe",
+            "SONOS_OPENAI_TRANSCRIPTION_TOKEN": "test-token"
         ])
 
         XCTAssertEqual(configuration.mode, .openai)
         XCTAssertEqual(configuration.openAITranscriptionURL, try XCTUnwrap(URL(string: "https://example.com/api/transcribe")))
+        XCTAssertEqual(configuration.openAITranscriptionToken, "test-token")
     }
 
     func testVoiceTranscriptionConfigurationFallsBackForInvalidMode() {
@@ -130,22 +160,26 @@ final class VoiceRemoteViewModelTests: XCTestCase {
 private final class TestSpeechRecognizer: SpeechRecognizing {
     let sourceDescription: String
     let usesDeferredTranscription: Bool
+    private(set) var startCount = 0
     private let permissionState: SpeechPermissionState
     private let stopResult: String?
     private let stopError: Error?
+    private let stopDelay: Duration?
 
     init(
         sourceDescription: String = "Test speech",
         permissionState: SpeechPermissionState = .granted,
         stopResult: String? = nil,
         stopError: Error? = nil,
-        usesDeferredTranscription: Bool = false
+        usesDeferredTranscription: Bool = false,
+        stopDelay: Duration? = nil
     ) {
         self.sourceDescription = sourceDescription
         self.permissionState = permissionState
         self.stopResult = stopResult
         self.stopError = stopError
         self.usesDeferredTranscription = usesDeferredTranscription
+        self.stopDelay = stopDelay
     }
 
     func currentPermissionState() async -> SpeechPermissionState {
@@ -159,11 +193,17 @@ private final class TestSpeechRecognizer: SpeechRecognizing {
     func startTranscribing(
         onUpdate: @escaping @Sendable (String) -> Void,
         onError: @escaping @Sendable (String) -> Void
-    ) async throws { }
+    ) async throws {
+        startCount += 1
+    }
 
     func stopTranscribing() async throws -> String? {
         if let stopError {
             throw stopError
+        }
+
+        if let stopDelay {
+            try await Task.sleep(for: stopDelay)
         }
 
         return stopResult

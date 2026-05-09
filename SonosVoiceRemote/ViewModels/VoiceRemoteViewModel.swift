@@ -13,6 +13,7 @@ final class VoiceRemoteViewModel: ObservableObject {
     @Published private(set) var debugLog: [String] = []
     @Published private(set) var isRecording = false
     @Published private(set) var isExecuting = false
+    @Published private(set) var isTranscribing = false
     @Published private(set) var permissionState: SpeechPermissionState = .unknown
 
     private let speechRecognizer: any SpeechRecognizing
@@ -170,6 +171,11 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     func toggleRecording() async {
+        guard !isTranscribing else {
+            statusText = "Transcription is still in progress."
+            return
+        }
+
         if isRecording {
             await stopRecordingAndExecute()
         } else {
@@ -214,6 +220,11 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     private func startRecording() async {
+        guard !isTranscribing else {
+            statusText = "Transcription is still in progress."
+            return
+        }
+
         if permissionState != .granted {
             permissionState = await speechRecognizer.requestPermissions()
         }
@@ -252,10 +263,21 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     private func stopRecordingAndExecute() async {
+        let usesDeferredTranscription = speechRecognizer.usesDeferredTranscription
+        if usesDeferredTranscription {
+            isTranscribing = true
+        }
+
         isRecording = false
 
-        if speechRecognizer.usesDeferredTranscription {
+        if usesDeferredTranscription {
             statusText = "Transcribing..."
+        }
+
+        defer {
+            if usesDeferredTranscription {
+                isTranscribing = false
+            }
         }
 
         do {

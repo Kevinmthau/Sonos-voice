@@ -215,9 +215,10 @@ struct VoiceRemoteView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .disabled(viewModel.isExecuting || viewModel.isTranscribing)
                 .accessibilityLabel(viewModel.isRecording ? "Stop recording" : "Start recording")
 
-                Text(viewModel.isRecording ? "Listening live..." : "Ready for a command")
+                Text(viewModel.isTranscribing ? "Transcribing..." : (viewModel.isRecording ? "Listening live..." : "Ready for a command"))
                     .font(.system(.headline, design: .rounded))
                     .foregroundStyle(.white)
 

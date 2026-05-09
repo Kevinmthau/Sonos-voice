@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
 const DEFAULT_MODEL = "gpt-4o-mini-transcribe";
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
@@ -13,6 +15,15 @@ exports.handler = async function handler(event) {
 
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, { error: "Method not allowed" });
+  }
+
+  const proxyToken = process.env.SONOS_OPENAI_TRANSCRIPTION_TOKEN;
+  if (!proxyToken) {
+    return jsonResponse(503, { error: "OpenAI transcription proxy is not configured." });
+  }
+
+  if (!isAuthorized(event, proxyToken)) {
+    return jsonResponse(401, { error: "Unauthorized." });
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -68,10 +79,24 @@ function sanitizeFilename(value) {
   return String(value).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "command.m4a";
 }
 
+function isAuthorized(event, expectedToken) {
+  const headers = event.headers || {};
+  const authorization = headers.authorization || headers.Authorization || "";
+  const suppliedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+
+  if (!suppliedToken) {
+    return false;
+  }
+
+  const supplied = Buffer.from(suppliedToken, "utf8");
+  const expected = Buffer.from(expectedToken, "utf8");
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+}
+
 function corsHeaders() {
   return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, X-Audio-Filename",
+    "Access-Control-Allow-Origin": process.env.SONOS_TRANSCRIPTION_ALLOWED_ORIGIN || "https://sonos-voice.netlify.app",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Audio-Filename",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 }

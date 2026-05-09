@@ -15,7 +15,10 @@ enum AppEnvironment {
         return ConfiguredVoiceTranscriber(
             configuration: configuration,
             appleTranscriber: SpeechRecognizerService(),
-            openAITranscriber: OpenAITranscriptionService(endpointURL: configuration.openAITranscriptionURL)
+            openAITranscriber: OpenAITranscriptionService(
+                endpointURL: configuration.openAITranscriptionURL,
+                proxyToken: configuration.openAITranscriptionToken
+            )
         )
     }
 

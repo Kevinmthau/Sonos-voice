@@ -16,6 +16,7 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
     }
 
     private let endpointURL: URL
+    private let proxyToken: String?
     private let session: URLSession
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
@@ -28,8 +29,9 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         true
     }
 
-    init(endpointURL: URL, session: URLSession = .shared) {
+    init(endpointURL: URL, proxyToken: String?, session: URLSession = .shared) {
         self.endpointURL = endpointURL
+        self.proxyToken = proxyToken
         self.session = session
         super.init()
     }
@@ -134,6 +136,9 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         request.httpBody = audioData
         request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
         request.setValue(url.lastPathComponent, forHTTPHeaderField: "X-Audio-Filename")
+        if let proxyToken {
+            request.setValue("Bearer \(proxyToken)", forHTTPHeaderField: "Authorization")
+        }
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
