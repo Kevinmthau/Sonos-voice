@@ -118,6 +118,29 @@ final class VoiceRemoteViewModelTests: XCTestCase {
         XCTAssertEqual(speechRecognizer.startCount, 1)
     }
 
+    func testMicrophoneToggleRemainsEnabledToStopActiveRecordingWhileExecuting() async {
+        let viewModel = makeViewModel()
+        await viewModel.loadIfNeeded()
+
+        await viewModel.toggleRecording()
+        XCTAssertTrue(viewModel.isRecording)
+
+        let executeTask = Task {
+            await viewModel.executeManual(.pause)
+        }
+
+        for _ in 0..<20 where !viewModel.isExecuting {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(viewModel.isExecuting)
+        XCTAssertFalse(viewModel.isMicrophoneToggleDisabled)
+
+        await viewModel.toggleRecording()
+        XCTAssertFalse(viewModel.isRecording)
+
+        await executeTask.value
+    }
+
     func testVoiceTranscriptionConfigurationDefaultsToApple() {
         let configuration = VoiceTranscriptionConfiguration.fromEnvironment([:])
 

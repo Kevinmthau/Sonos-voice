@@ -75,6 +75,10 @@ final class VoiceRemoteViewModel: ObservableObject {
         "\(speechRecognizer.sourceDescription). \(permissionState.statusMessage)"
     }
 
+    var isMicrophoneToggleDisabled: Bool {
+        isTranscribing || (isExecuting && !isRecording)
+    }
+
     func loadIfNeeded() async {
         guard !hasLoaded else { return }
         hasLoaded = true
