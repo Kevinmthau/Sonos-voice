@@ -304,6 +304,12 @@ final class VoiceRemoteViewModel: ObservableObject {
             return
         }
 
+        guard !isExecuting else {
+            statusText = "Command captured. Wait for the current Sonos command to finish."
+            appendLog("Captured voice command while another command was running: \(finalTranscript)")
+            return
+        }
+
         await processTranscript(finalTranscript)
     }
 
@@ -313,6 +319,12 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     private func execute(_ intent: ParsedVoiceIntent) async {
+        guard !isExecuting else {
+            statusText = "Wait for the current Sonos command to finish."
+            appendLog("Skipped command while another command was running: \(intent.summary)")
+            return
+        }
+
         isExecuting = true
         statusText = "Executing \(intent.action.displayName)..."
         appendLog("Executing intent: \(intent.summary)")

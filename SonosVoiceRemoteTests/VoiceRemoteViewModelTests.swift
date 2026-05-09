@@ -141,6 +141,40 @@ final class VoiceRemoteViewModelTests: XCTestCase {
         await executeTask.value
     }
 
+    func testStoppingRecordingWhileExecutingCapturesTranscriptWithoutStartingSecondCommand() async {
+        let speechRecognizer = TestSpeechRecognizer(stopResult: "set kitchen to 30")
+        let sonosController = TestSonosController(pauseDelay: .milliseconds(200))
+        let viewModel = makeViewModel(speechRecognizer: speechRecognizer, sonosController: sonosController)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.toggleRecording()
+
+        let executeTask = Task {
+            await viewModel.executeManual(.pause)
+        }
+
+        for _ in 0..<20 where !viewModel.isExecuting {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(viewModel.isExecuting)
+
+        await viewModel.toggleRecording()
+
+        XCTAssertFalse(viewModel.isRecording)
+        XCTAssertEqual(viewModel.transcript, "set kitchen to 30")
+        XCTAssertEqual(viewModel.statusText, "Command captured. Wait for the current Sonos command to finish.")
+
+        let countsWhileExecuting = await sonosController.commandCounts()
+        XCTAssertEqual(countsWhileExecuting.pause, 1)
+        XCTAssertEqual(countsWhileExecuting.setVolume, 0)
+
+        await executeTask.value
+
+        let finalCounts = await sonosController.commandCounts()
+        XCTAssertEqual(finalCounts.pause, 1)
+        XCTAssertEqual(finalCounts.setVolume, 0)
+    }
+
     func testVoiceTranscriptionConfigurationDefaultsToApple() {
         let configuration = VoiceTranscriptionConfiguration.fromEnvironment([:])
 
@@ -170,11 +204,12 @@ final class VoiceRemoteViewModelTests: XCTestCase {
     }
 
     private func makeViewModel(
-        speechRecognizer: any SpeechRecognizing = TestSpeechRecognizer()
+        speechRecognizer: any SpeechRecognizing = TestSpeechRecognizer(),
+        sonosController: any SonosControlling = TestSonosController()
     ) -> VoiceRemoteViewModel {
         VoiceRemoteViewModel(
             speechRecognizer: speechRecognizer,
-            sonosController: TestSonosController(),
+            sonosController: sonosController,
             intentParser: IntentParser()
         )
     }
@@ -238,6 +273,9 @@ private final class TestSpeechRecognizer: SpeechRecognizing {
 private actor TestSonosController: SonosControlling {
     private var rooms: [SonosRoom]
     private var groups: [SonosGroup]
+    private var pauseCallCount = 0
+    private var setVolumeCallCount = 0
+    private let pauseDelay: Duration
     private let household = SonosHousehold(
         id: "test-household",
         name: "Test Household",
@@ -249,9 +287,14 @@ private actor TestSonosController: SonosControlling {
         SonosRoom(name: "Living Room", volume: 25, isCoordinator: true, groupName: "Living Room"),
         SonosRoom(name: "Bedroom", volume: 15, isCoordinator: true, groupName: "Bedroom"),
         SonosRoom(name: "Dining Room", volume: 18, isCoordinator: true, groupName: "Dining Room")
-    ]) {
+    ], pauseDelay: Duration = .milliseconds(60)) {
         self.rooms = seedRooms
         self.groups = seedRooms.map { SonosGroup(id: $0.id, name: $0.name, roomNames: [$0.name]) }
+        self.pauseDelay = pauseDelay
+    }
+
+    func commandCounts() -> (pause: Int, setVolume: Int) {
+        (pauseCallCount, setVolumeCallCount)
     }
 
     func connectionState() async -> SonosConnectionState {
@@ -309,8 +352,9 @@ private actor TestSonosController: SonosControlling {
     }
 
     func pause(room: SonosRoom?) async throws -> SonosCommandResult {
+        pauseCallCount += 1
         let target = try resolveRoom(from: room)
-        try await Task.sleep(for: .milliseconds(60))
+        try await Task.sleep(for: pauseDelay)
 
         updateRoom(named: target.name) { room in
             room.isPlaying = false
@@ -356,6 +400,7 @@ private actor TestSonosController: SonosControlling {
     }
 
     func setVolume(room: SonosRoom?, value: Int) async throws -> SonosCommandResult {
+        setVolumeCallCount += 1
         let target = try resolveRoom(from: room)
         try await Task.sleep(for: .milliseconds(50))
 
