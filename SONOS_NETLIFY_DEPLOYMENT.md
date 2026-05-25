@@ -39,13 +39,27 @@ In Netlify:
 2. Go to `Site configuration` -> `Environment variables`.
 3. Add:
 
-- `SONOS_CLIENT_ID`
+**Required**
+
+- `SONOS_CLIENT_ID` (no default — the build-time fallback has been removed)
 - `SONOS_CLIENT_SECRET`
-- `SONOS_STATE_SECRET`
+- `SONOS_STATE_SECRET` (random string ≥32 bytes)
+- `SONOS_ALLOWED_HOUSEHOLDS` — comma-separated Sonos household IDs allowed to use this deployment. If unset the proxy will accept any household, which is **only** appropriate for first-run testing. Set this to your friends-and-family household IDs (find one by signing in once and copying it out of `/households` response) before sharing the URL.
+
+**Required if OpenAI transcription is enabled**
+
+- `OPENAI_API_KEY`
+- `SONOS_OPENAI_TRANSCRIPTION_TOKEN`
+
+**Optional**
+
 - `SONOS_REDIRECT_URI=https://sonos-voice.netlify.app/sonos/oauth/callback`
 - `SONOS_IOS_CALLBACK_URL=sonosvoiceremote://oauth/callback`
-- `OPENAI_API_KEY` if you enable OpenAI transcription mode
-- `SONOS_OPENAI_TRANSCRIPTION_TOKEN` if you enable OpenAI transcription mode
+- `SONOS_PROXY_ALLOWED_ORIGIN` — CORS origin for `/api/sonos` and `/api/sonos/refresh`. Defaults to `https://sonos-voice.netlify.app`. Set this if you host the SPA on a custom domain.
+- `SONOS_TRANSCRIPTION_ALLOWED_ORIGIN` — CORS origin for `/api/transcribe`. Defaults to `https://sonos-voice.netlify.app`.
+- `TRANSCRIBE_PER_IP_DAILY_CAP` — daily transcription request cap per IP. Default `200`.
+- `TRANSCRIBE_GLOBAL_DAILY_CAP` — daily transcription cap across the deployment. Default `2000` (~$0.60/day at `gpt-4o-mini-transcribe` for typical voice commands).
+- `SONOS_REFRESH_PER_IP_DAILY_CAP` — daily Sonos token-refresh cap per IP. Default `60`.
 
 Recommended:
 
@@ -53,26 +67,36 @@ Recommended:
 - Do not expose `SONOS_CLIENT_SECRET` in client-side code.
 - Do not expose `OPENAI_API_KEY` in client-side code; the iOS app sends audio to the Netlify function at `/api/transcribe`.
 - Generate `SONOS_OPENAI_TRANSCRIPTION_TOKEN` as a long random string and set the same value in the iOS launch environment so the transcription proxy rejects unauthenticated calls before using the OpenAI key.
-- This repo already bakes in your current Sonos client ID as a default, but keeping `SONOS_CLIENT_ID` set in Netlify is still cleaner and easier to rotate later.
 - The web controller now defaults to the same registered Sonos redirect URI as iOS. You only need `SONOS_WEB_REDIRECT_URI` if you explicitly register a second web-specific callback URL with Sonos.
+
+**Netlify Blobs** is used by the transcription and refresh endpoints to track daily rate-limit counters. No setup is needed beyond deploying to Netlify — the `transcription-rate-limits` and `sonos-refresh-rate-limits` stores are auto-provisioned.
 
 ## 4. Netlify Routing
 
 After deploy, these routes should exist:
 
 - `https://sonos-voice.netlify.app/`
+- `https://sonos-voice.netlify.app/privacy`
 - `https://sonos-voice.netlify.app/sonos/oauth/start`
 - `https://sonos-voice.netlify.app/sonos/oauth/callback`
+- `https://sonos-voice.netlify.app/sonos/oauth/start/web`
+- `https://sonos-voice.netlify.app/sonos/oauth/callback/web`
 - `https://sonos-voice.netlify.app/sonos/events`
-- `https://sonos-voice.netlify.app/api/transcribe`
+- `https://sonos-voice.netlify.app/api/sonos` (POST only)
+- `https://sonos-voice.netlify.app/api/sonos/refresh` (POST only)
+- `https://sonos-voice.netlify.app/api/transcribe` (POST only)
 
 Expected behavior:
 
 - `/` serves the web controller SPA.
-- `/sonos/oauth/start` redirects to Sonos login.
+- `/privacy` serves the privacy notice page (SPA route).
+- `/sonos/oauth/start` redirects to Sonos login (iOS flow).
 - `/sonos/oauth/callback` exchanges the Sonos auth code for tokens and redirects into the iPhone app.
+- `/sonos/oauth/start/web` and `/sonos/oauth/callback/web` mirror the iOS flow for the browser SPA.
 - `/sonos/events` returns `200 OK` and can later be expanded to verify/store Sonos events.
-- `/api/transcribe` accepts short command audio and transcribes it through OpenAI when cloud transcription is enabled.
+- `/api/sonos` proxies Sonos Control API calls; enforces method/path validation, the household allowlist, and `SONOS_PROXY_ALLOWED_ORIGIN` CORS.
+- `/api/sonos/refresh` exchanges a Sonos refresh token for a new access token; rate-limited per IP via Netlify Blobs.
+- `/api/transcribe` accepts short command audio and transcribes it through OpenAI when cloud transcription is enabled; enforces per-IP and global daily caps via Netlify Blobs.
 - Legacy `/sonos` app URLs redirect to `/`.
 
 ## 5. iOS App Configuration
@@ -151,6 +175,20 @@ If the app signs in but cannot control speakers:
 
 ## 9. Production Follow-Up
 
-This repo uses Netlify Functions as a lightweight OAuth broker. That is acceptable for initial deployment, but the next hardening step is:
+This repo uses Netlify Functions as a lightweight OAuth broker. That is acceptable for a private friends-and-family launch. Possible next hardening steps:
 
-- Persist tokens server-side per user instead of round-tripping them through the iOS callback query string.
+- Persist tokens server-side per user (e.g. Supabase or Netlify Blobs) instead of relying on `localStorage` / Keychain.
+- Add Sentry (or another error-reporting backend) for production crash visibility on both web and iOS.
+- Add a Content-Security-Policy header on the SPA to reduce the XSS surface around localStorage-stored Sonos tokens.
+- Port the JS intent parser tests from `SonosVoiceRemoteTests/IntentParserTests.swift` to Vitest so both clients stay in sync.
+
+## 10. Pre-share Checklist
+
+Before sharing the URL or TestFlight build with a new user:
+
+- [ ] `SONOS_CLIENT_ID`, `SONOS_CLIENT_SECRET`, `SONOS_STATE_SECRET` are all set in Netlify.
+- [ ] `SONOS_ALLOWED_HOUSEHOLDS` contains the new user's household ID.
+- [ ] `OPENAI_API_KEY` and `SONOS_OPENAI_TRANSCRIPTION_TOKEN` are set if OpenAI transcription is enabled.
+- [ ] `TRANSCRIBE_GLOBAL_DAILY_CAP` is set to a value matching your budget.
+- [ ] `/privacy` loads in a browser and is reachable from the footer link on `/`.
+- [ ] iOS app has up-to-date `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription` strings (App Store / TestFlight require these).

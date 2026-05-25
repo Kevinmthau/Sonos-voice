@@ -1,0 +1,167 @@
+{
+  "rooms": ["Kitchen", "Living Room", "Bedroom", "Dining Room"],
+  "cases": [
+    {
+      "name": "pause falls back to selected room",
+      "transcript": "pause",
+      "selectedRoom": "Kitchen",
+      "expected": {
+        "action": "pause",
+        "targetRoom": "Kitchen",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "resume falls back to selected room",
+      "transcript": "resume",
+      "selectedRoom": "Living Room",
+      "expected": {
+        "action": "resume",
+        "targetRoom": "Living Room",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "skip command parses",
+      "transcript": "skip",
+      "selectedRoom": "Bedroom",
+      "expected": {
+        "action": "skip",
+        "targetRoom": "Bedroom",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "turn it up parses",
+      "transcript": "turn it up",
+      "selectedRoom": "Dining Room",
+      "expected": {
+        "action": "volume_up",
+        "targetRoom": "Dining Room",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "turn it down parses",
+      "transcript": "turn it down",
+      "selectedRoom": "Dining Room",
+      "expected": {
+        "action": "volume_down",
+        "targetRoom": "Dining Room",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "set kitchen to twenty parses",
+      "transcript": "Set kitchen to 20",
+      "selectedRoom": "Living Room",
+      "expected": {
+        "action": "set_volume",
+        "targetRoom": "Kitchen",
+        "contentQuery": null,
+        "volumeValue": 20,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "volume clamps to hundred",
+      "transcript": "set bedroom to 110",
+      "selectedRoom": "Living Room",
+      "expected": {
+        "action": "set_volume",
+        "targetRoom": "Bedroom",
+        "contentQuery": null,
+        "volumeValue": 100,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "play jazz in kitchen parses",
+      "transcript": "Play jazz in the kitchen",
+      "selectedRoom": "Living Room",
+      "expected": {
+        "action": "play",
+        "targetRoom": "Kitchen",
+        "contentQuery": "jazz",
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "play miles davis in living room parses",
+      "transcript": "Play Miles Davis in the living room",
+      "selectedRoom": "Kitchen",
+      "expected": {
+        "action": "play",
+        "targetRoom": "Living Room",
+        "contentQuery": "miles davis",
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "play everywhere groups all rooms",
+      "transcript": "play everywhere",
+      "selectedRoom": "Kitchen",
+      "expected": {
+        "action": "group_all",
+        "targetRoom": null,
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "all_rooms"
+      }
+    },
+    {
+      "name": "play jazz everywhere preserves query",
+      "transcript": "play jazz everywhere",
+      "selectedRoom": "Kitchen",
+      "expected": {
+        "action": "group_all",
+        "targetRoom": null,
+        "contentQuery": "jazz",
+        "volumeValue": null,
+        "scope": "all_rooms"
+      }
+    },
+    {
+      "name": "pause everywhere uses all rooms scope",
+      "transcript": "pause everywhere",
+      "selectedRoom": "Kitchen",
+      "expected": {
+        "action": "pause",
+        "targetRoom": null,
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "all_rooms"
+      }
+    },
+    {
+      "name": "play alone falls back to resume",
+      "transcript": "play",
+      "selectedRoom": "Bedroom",
+      "expected": {
+        "action": "resume",
+        "targetRoom": "Bedroom",
+        "contentQuery": null,
+        "volumeValue": null,
+        "scope": "single_room"
+      }
+    },
+    {
+      "name": "unknown command does not parse",
+      "transcript": "make coffee",
+      "selectedRoom": "Kitchen",
+      "expected": null
+    }
+  ]
+}

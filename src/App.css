@@ -83,6 +83,14 @@ body {
   flex-shrink: 0;
 }
 
+.consent-actions {
+  margin-top: 12px;
+}
+
+.stacked-actions {
+  margin-top: 16px;
+}
+
 .detail-text {
   color: rgba(255, 255, 255, 0.86);
   margin-top: 8px;
@@ -106,6 +114,15 @@ body {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.7);
   margin-top: 8px;
+}
+
+.app-footer {
+  text-align: center;
+  margin-top: 24px;
+}
+
+.footer-link {
+  color: inherit;
 }
 
 /* Buttons */

@@ -20,6 +20,11 @@
 		300000000000000000000018 /* OpenAITranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000020 /* OpenAITranscriptionService.swift */; };
 		300000000000000000000019 /* ConfiguredVoiceTranscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000021 /* ConfiguredVoiceTranscriber.swift */; };
 		300000000000000000000010 /* SonosControlling.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000010 /* SonosControlling.swift */; };
+		300000000000000000000020 /* SonosAPIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000022 /* SonosAPIModels.swift */; };
+		300000000000000000000021 /* SonosTokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000023 /* SonosTokenStore.swift */; };
+		300000000000000000000022 /* SonosHTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000024 /* SonosHTTPClient.swift */; };
+		300000000000000000000023 /* SonosTopologyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000025 /* SonosTopologyService.swift */; };
+		300000000000000000000024 /* SonosCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000026 /* SonosCommandService.swift */; };
 		300000000000000000000012 /* RealSonosController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000012 /* RealSonosController.swift */; };
 		300000000000000000000013 /* IntentParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000013 /* IntentParser.swift */; };
 		300000000000000000000014 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* AppLogger.swift */; };
@@ -51,6 +56,11 @@
 		200000000000000000000020 /* OpenAITranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAITranscriptionService.swift; sourceTree = "<group>"; };
 		200000000000000000000021 /* ConfiguredVoiceTranscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfiguredVoiceTranscriber.swift; sourceTree = "<group>"; };
 		200000000000000000000010 /* SonosControlling.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosControlling.swift; sourceTree = "<group>"; };
+		200000000000000000000022 /* SonosAPIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosAPIModels.swift; sourceTree = "<group>"; };
+		200000000000000000000023 /* SonosTokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosTokenStore.swift; sourceTree = "<group>"; };
+		200000000000000000000024 /* SonosHTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosHTTPClient.swift; sourceTree = "<group>"; };
+		200000000000000000000025 /* SonosTopologyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosTopologyService.swift; sourceTree = "<group>"; };
+		200000000000000000000026 /* SonosCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonosCommandService.swift; sourceTree = "<group>"; };
 		200000000000000000000012 /* RealSonosController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealSonosController.swift; sourceTree = "<group>"; };
 		200000000000000000000013 /* IntentParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentParser.swift; sourceTree = "<group>"; };
 		200000000000000000000014 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
@@ -195,6 +205,11 @@
 			isa = PBXGroup;
 			children = (
 				200000000000000000000010 /* SonosControlling.swift */,
+				200000000000000000000022 /* SonosAPIModels.swift */,
+				200000000000000000000023 /* SonosTokenStore.swift */,
+				200000000000000000000024 /* SonosHTTPClient.swift */,
+				200000000000000000000025 /* SonosTopologyService.swift */,
+				200000000000000000000026 /* SonosCommandService.swift */,
 				200000000000000000000012 /* RealSonosController.swift */,
 			);
 			path = Sonos;
@@ -311,6 +326,11 @@
 				300000000000000000000018 /* OpenAITranscriptionService.swift in Sources */,
 				300000000000000000000019 /* ConfiguredVoiceTranscriber.swift in Sources */,
 				300000000000000000000010 /* SonosControlling.swift in Sources */,
+				300000000000000000000020 /* SonosAPIModels.swift in Sources */,
+				300000000000000000000021 /* SonosTokenStore.swift in Sources */,
+				300000000000000000000022 /* SonosHTTPClient.swift in Sources */,
+				300000000000000000000023 /* SonosTopologyService.swift in Sources */,
+				300000000000000000000024 /* SonosCommandService.swift in Sources */,
 				300000000000000000000012 /* RealSonosController.swift in Sources */,
 				300000000000000000000013 /* IntentParser.swift in Sources */,
 				300000000000000000000014 /* AppLogger.swift in Sources */,
@@ -385,6 +405,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinthau.SonosVoiceRemote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SONOS_AUTH_START_URL = "https://sonos-voice.netlify.app/sonos/oauth/start";
+				SONOS_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -409,6 +431,8 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.kevinthau.SonosVoiceRemote;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SONOS_AUTH_START_URL = "https://sonos-voice.netlify.app/sonos/oauth/start";
+				SONOS_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

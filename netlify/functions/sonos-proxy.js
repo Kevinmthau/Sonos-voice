@@ -1,7 +1,69 @@
 const SONOS_CONTROL_BASE = "https://api.ws.sonos.com/control/api/v1";
-const { optionalEnv } = require("./_sonos-oauth");
+const { env, optionalEnv } = require("./_sonos-oauth");
 
-const DEFAULT_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
+const ALLOWED_METHODS = new Set(["GET", "POST", "DELETE"]);
+const ALLOWED_PATH_PREFIXES = ["households", "groups", "players", "playbackSessions"];
+const MAX_PATH_LENGTH = 256;
+const MAX_BODY_BYTES = 16 * 1024;
+const DEFAULT_ALLOWED_ORIGIN = "https://sonos-voice.netlify.app";
+
+function allowedOrigin() {
+  return optionalEnv("SONOS_PROXY_ALLOWED_ORIGIN", DEFAULT_ALLOWED_ORIGIN);
+}
+
+function parseAllowedHouseholds() {
+  const raw = optionalEnv("SONOS_ALLOWED_HOUSEHOLDS", "");
+  return new Set(
+    raw
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+}
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin(),
+    "Vary": "Origin",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  };
+}
+
+function jsonResponse(statusCode, body) {
+  return {
+    statusCode,
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+    body: JSON.stringify(body),
+  };
+}
+
+function extractHouseholdFromPath(trimmedPath) {
+  const match = trimmedPath.match(/^households\/([^/]+)(?:\/|$)/);
+  return match ? match[1] : null;
+}
+
+function validatePath(path) {
+  if (typeof path !== "string" || !path.length) {
+    return "path must be a non-empty string";
+  }
+  if (path.length > MAX_PATH_LENGTH) {
+    return "path is too long";
+  }
+  if (path.includes("..") || path.includes("//")) {
+    return "path contains disallowed segments";
+  }
+  const trimmed = path.replace(/^\/+/, "");
+  const prefix = trimmed.split("/")[0];
+  if (!ALLOWED_PATH_PREFIXES.includes(prefix)) {
+    return `path prefix '${prefix}' is not allowed`;
+  }
+  return null;
+}
 
 exports.handler = async function handler(event) {
   if (event.httpMethod === "OPTIONS") {
@@ -16,14 +78,19 @@ exports.handler = async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed" });
   }
 
+  const rawBody = event.body || "{}";
+  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+    return jsonResponse(413, { error: "Request body too large" });
+  }
+
   let payload;
   try {
-    payload = JSON.parse(event.body || "{}");
+    payload = JSON.parse(rawBody);
   } catch {
     return jsonResponse(400, { error: "Invalid JSON body" });
   }
 
-  const { path, method, body, token } = payload;
+  const { path, method, body, token, householdId } = payload;
 
   if (!path || !method) {
     return jsonResponse(400, { error: "Missing path or method" });
@@ -33,18 +100,47 @@ exports.handler = async function handler(event) {
     return jsonResponse(401, { error: "Missing access token" });
   }
 
-  const trimmedPath = path.replace(/^\/+/, "");
-  const url = `${SONOS_CONTROL_BASE}/${trimmedPath}`;
-  const clientID = optionalEnv("SONOS_CLIENT_ID", DEFAULT_CLIENT_ID);
+  if (!ALLOWED_METHODS.has(method)) {
+    return jsonResponse(400, { error: `Method '${method}' is not permitted` });
+  }
 
+  const pathError = validatePath(path);
+  if (pathError) {
+    return jsonResponse(400, { error: pathError });
+  }
+
+  const trimmedPath = path.replace(/^\/+/, "");
+  const pathHouseholdId = extractHouseholdFromPath(trimmedPath);
+  const allowedHouseholds = parseAllowedHouseholds();
+
+  // Bare "households" listing is allowed (user needs it to pick a household);
+  // every other path either has a household in the URL or must declare one.
+  if (trimmedPath !== "households") {
+    const effectiveHouseholdId = pathHouseholdId || householdId;
+    if (!effectiveHouseholdId) {
+      return jsonResponse(400, { error: "Missing householdId for this request" });
+    }
+    if (allowedHouseholds.size > 0 && !allowedHouseholds.has(effectiveHouseholdId)) {
+      return jsonResponse(403, { error: "This household is not allowed to use this deployment." });
+    }
+    if (pathHouseholdId && householdId && pathHouseholdId !== householdId) {
+      return jsonResponse(400, { error: "Path household does not match declared household" });
+    }
+  }
+
+  let clientID;
+  try {
+    clientID = env("SONOS_CLIENT_ID");
+  } catch (error) {
+    return jsonResponse(500, { error: error.message });
+  }
+
+  const url = `${SONOS_CONTROL_BASE}/${trimmedPath}`;
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
+    "X-Sonos-Api-Key": clientID,
   };
-
-  if (clientID) {
-    headers["X-Sonos-Api-Key"] = clientID;
-  }
 
   if (body) {
     headers["Content-Type"] = "application/json";
@@ -68,6 +164,7 @@ exports.handler = async function handler(event) {
       headers: {
         ...corsHeaders(),
         "Content-Type": "application/json",
+        "Cache-Control": "no-store",
       },
       body: responseText || "{}",
     };
@@ -75,22 +172,3 @@ exports.handler = async function handler(event) {
     return jsonResponse(502, { error: `Sonos API request failed: ${error.message}` });
   }
 };
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  };
-}
-
-function jsonResponse(statusCode, body) {
-  return {
-    statusCode,
-    headers: {
-      ...corsHeaders(),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  };
-}

@@ -1,248 +1,52 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { parseIntent, intentSummary } from './parsing/intentParser.js';
-import { isSpeechSupported, createSpeechRecognizer } from './services/speechRecognizer.js';
-import {
-  getStoredToken,
-  storeTokens,
-  clearTokens,
-  fetchHouseholds,
-  fetchRooms,
-  executeIntent,
-  getSelectedHouseholdID,
-  setSelectedHouseholdID,
-} from './services/sonosController.js';
+import { useState, useCallback } from 'react';
+import { intentSummary } from './parsing/intentParser.js';
+import { useDebugLog } from './hooks/useDebugLog.js';
+import { useSonosConnection } from './hooks/useSonosConnection.js';
+import { useVoiceCommand } from './hooks/useVoiceCommand.js';
 
-function makeLogLine(msg) {
-  const now = new Date();
-  const ts = now.toLocaleTimeString('en-US', { hour12: false });
-  return `[${ts}] ${msg}`;
-}
+const CONSENT_KEY = 'voice_consent_v1';
 
 export default function App() {
-  const [connectionStatus, setConnectionStatus] = useState('checking');
-  const [households, setHouseholds] = useState([]);
-  const [selectedHouseholdId, setSelectedHouseholdId] = useState('');
-  const [rooms, setRooms] = useState([]);
-  const [selectedRoomId, setSelectedRoomId] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [parsedIntent, setParsedIntent] = useState(null);
-  const [statusText, setStatusText] = useState('Discovering Sonos rooms...');
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [debugLog, setDebugLog] = useState([]);
-  const recognizerRef = useRef(null);
+  const [consentGranted, setConsentGranted] = useState(
+    typeof window !== 'undefined' && window.localStorage?.getItem(CONSENT_KEY) === 'yes'
+  );
+  const { debugLog, appendLog } = useDebugLog();
+  const {
+    connectionStatus,
+    households,
+    householdName,
+    rooms,
+    selectedHouseholdId,
+    selectedRoom,
+    selectedRoomId,
+    statusText,
+    handleDisconnect,
+    handleHouseholdChange,
+    handleRoomChange,
+    refreshRooms,
+    setStatusText,
+  } = useSonosConnection({ appendLog });
+  const {
+    executeManual,
+    isExecuting,
+    isRecording,
+    parsedIntent,
+    speechSupported,
+    toggleRecording,
+    transcript,
+  } = useVoiceCommand({
+    appendLog,
+    consentGranted,
+    refreshRooms,
+    rooms,
+    selectedRoom,
+    setStatusText,
+  });
 
-  const selectedRoom = rooms.find((r) => r.id === selectedRoomId) || rooms[0] || null;
-
-  const appendLog = useCallback((msg) => {
-    const line = makeLogLine(msg);
-    setDebugLog((prev) => [line, ...prev].slice(0, 8));
+  const grantConsent = useCallback(() => {
+    window.localStorage?.setItem(CONSENT_KEY, 'yes');
+    setConsentGranted(true);
   }, []);
-
-  // Handle OAuth callback params on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const error = params.get('error');
-
-    if (error) {
-      const desc = params.get('error_description') || error;
-      setStatusText(`Auth error: ${desc}`);
-      setConnectionStatus('auth_required');
-      window.history.replaceState({}, '', '/');
-      return;
-    }
-
-    if (accessToken) {
-      storeTokens(accessToken, refreshToken);
-      window.history.replaceState({}, '', '/');
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    async function init() {
-      const token = getStoredToken();
-      if (!token) {
-        setConnectionStatus('auth_required');
-        setStatusText('Please sign in to Sonos.');
-        appendLog('No Sonos token found. Sign in required.');
-        return;
-      }
-
-      try {
-        const hh = await fetchHouseholds();
-        setHouseholds(hh);
-        const savedId = getSelectedHouseholdID();
-        const householdId = hh.find((h) => h.id === savedId)?.id || hh[0]?.id || '';
-        setSelectedHouseholdId(householdId);
-        setSelectedHouseholdID(householdId);
-        setConnectionStatus('ready');
-        appendLog('Connected to Sonos.');
-
-        if (householdId) {
-          const discoveredRooms = await fetchRooms(householdId);
-          setRooms(discoveredRooms);
-          setSelectedRoomId(discoveredRooms[0]?.id || '');
-          setStatusText(`Ready. Found ${discoveredRooms.length} room${discoveredRooms.length === 1 ? '' : 's'}.`);
-          appendLog(`Discovered ${discoveredRooms.length} rooms.`);
-        }
-      } catch (err) {
-        if (err.message.includes('expired') || err.message.includes('Not authenticated')) {
-          setConnectionStatus('auth_required');
-          setStatusText('Session expired. Please sign in again.');
-          clearTokens();
-        } else {
-          setConnectionStatus('unavailable');
-          setStatusText(err.message);
-        }
-        appendLog(err.message);
-      }
-    }
-
-    init();
-  }, [appendLog]);
-
-  const refreshRooms = useCallback(async () => {
-    if (!selectedHouseholdId) return;
-    try {
-      const discoveredRooms = await fetchRooms(selectedHouseholdId);
-      setRooms(discoveredRooms);
-      if (!discoveredRooms.find((r) => r.id === selectedRoomId)) {
-        setSelectedRoomId(discoveredRooms[0]?.id || '');
-      }
-      setStatusText(`Refreshed. Found ${discoveredRooms.length} room${discoveredRooms.length === 1 ? '' : 's'}.`);
-      appendLog(`Refreshed rooms: ${discoveredRooms.length}`);
-    } catch (err) {
-      setStatusText(err.message);
-      appendLog(`Refresh failed: ${err.message}`);
-    }
-  }, [selectedHouseholdId, selectedRoomId, appendLog]);
-
-  const handleDisconnect = useCallback(() => {
-    clearTokens();
-    setConnectionStatus('auth_required');
-    setHouseholds([]);
-    setRooms([]);
-    setSelectedRoomId('');
-    setSelectedHouseholdId('');
-    setStatusText('Disconnected from Sonos.');
-    appendLog('Disconnected.');
-  }, [appendLog]);
-
-  const handleHouseholdChange = useCallback(
-    async (id) => {
-      setSelectedHouseholdId(id);
-      setSelectedHouseholdID(id);
-      appendLog(`Selected household: ${id}`);
-      try {
-        const discoveredRooms = await fetchRooms(id);
-        setRooms(discoveredRooms);
-        setSelectedRoomId(discoveredRooms[0]?.id || '');
-        setStatusText(`Found ${discoveredRooms.length} rooms.`);
-      } catch (err) {
-        setStatusText(err.message);
-      }
-    },
-    [appendLog]
-  );
-
-  const doExecute = useCallback(
-    async (intent) => {
-      setIsExecuting(true);
-      setStatusText(`Executing ${intent.action.replace(/_/g, ' ')}...`);
-      appendLog(`Executing: ${intentSummary(intent)}`);
-      try {
-        const msg = await executeIntent(intent, rooms, selectedRoom);
-        setStatusText(msg);
-        appendLog(msg);
-        await refreshRooms();
-      } catch (err) {
-        setStatusText(err.message);
-        appendLog(`Error: ${err.message}`);
-      }
-      setIsExecuting(false);
-    },
-    [rooms, selectedRoom, refreshRooms, appendLog]
-  );
-
-  const toggleRecording = useCallback(() => {
-    if (isRecording) {
-      // Stop and execute
-      recognizerRef.current?.stop();
-      setIsRecording(false);
-      appendLog('Stopped listening.');
-
-      const finalTranscript = transcript.trim();
-      if (!finalTranscript) {
-        setStatusText('No speech captured.');
-        return;
-      }
-
-      const intent = parseIntent(finalTranscript, rooms, selectedRoom);
-      setParsedIntent(intent);
-      if (intent) {
-        doExecute(intent);
-      } else {
-        setStatusText("Couldn't interpret that command.");
-        appendLog(`Parser could not understand: ${finalTranscript}`);
-      }
-    } else {
-      // Start
-      if (!isSpeechSupported()) {
-        setStatusText('Speech recognition not supported. Use Chrome or Edge.');
-        appendLog('Speech not supported in this browser.');
-        return;
-      }
-
-      setTranscript('');
-      setParsedIntent(null);
-      setStatusText('Listening...');
-
-      const rec = createSpeechRecognizer({
-        onUpdate: (partial) => {
-          setTranscript(partial);
-          setParsedIntent(parseIntent(partial, rooms, selectedRoom));
-        },
-        onError: (msg) => {
-          setIsRecording(false);
-          setStatusText(msg);
-          appendLog(`Speech error: ${msg}`);
-        },
-        onEnd: () => {
-          setIsRecording(false);
-        },
-      });
-
-      if (rec) {
-        recognizerRef.current = rec;
-        rec.start();
-        setIsRecording(true);
-        appendLog('Started listening.');
-      }
-    }
-  }, [isRecording, transcript, rooms, selectedRoom, doExecute, appendLog]);
-
-  const executeManual = useCallback(
-    (action) => {
-      const intent = {
-        originalTranscript: action.replace(/_/g, ' '),
-        action,
-        targetRoom: selectedRoom?.name || null,
-        contentQuery: null,
-        volumeValue: null,
-        scope: 'single_room',
-      };
-      setParsedIntent(intent);
-      setTranscript('');
-      doExecute(intent);
-    },
-    [selectedRoom, doExecute]
-  );
-
-  const householdName = households.find((h) => h.id === selectedHouseholdId)?.name || 'No household selected';
-  const speechSupported = isSpeechSupported();
 
   return (
     <div className="app-bg">
@@ -310,11 +114,7 @@ export default function App() {
             <select
               className="select-input"
               value={selectedRoomId}
-              onChange={(e) => {
-                setSelectedRoomId(e.target.value);
-                const room = rooms.find((r) => r.id === e.target.value);
-                if (room) appendLog(`Selected room: ${room.name}`);
-              }}
+              onChange={(e) => handleRoomChange(e.target.value)}
             >
               {rooms.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -328,10 +128,7 @@ export default function App() {
               <button
                 key={room.id}
                 className={`room-chip ${room.id === selectedRoomId ? 'selected' : ''}`}
-                onClick={() => {
-                  setSelectedRoomId(room.id);
-                  appendLog(`Selected room: ${room.name}`);
-                }}
+                onClick={() => handleRoomChange(room.id)}
               >
                 <span className={`dot ${room.isPlaying ? 'playing' : ''}`} />
                 {room.name}
@@ -347,7 +144,7 @@ export default function App() {
             <button
               className={`mic-btn ${isRecording ? 'recording' : ''}`}
               onClick={toggleRecording}
-              disabled={!speechSupported && !isRecording}
+              disabled={(!speechSupported || !consentGranted) && !isRecording}
               aria-label={isRecording ? 'Stop recording' : 'Start recording'}
             >
               <div className="mic-ring" />
@@ -365,10 +162,30 @@ export default function App() {
             </button>
             <div className="mic-label">{isRecording ? 'Listening live...' : 'Ready for a command'}</div>
             {!speechSupported && (
-              <div className="footnote">Speech recognition requires Chrome or Edge.</div>
+              <div className="footnote">
+                Speech recognition needs Chrome or Edge on desktop or Android. Safari and Firefox
+                do not support the Web Speech API. On iPhone, use the native app instead.
+              </div>
             )}
           </div>
         </Card>
+
+        {!consentGranted && (
+          <Card title="Before You Talk">
+            <p className="detail-text">
+              When you tap the mic, your voice is captured in your browser and sent to your
+              browser's speech-to-text service (Google for Chrome, Microsoft for Edge) for
+              transcription. The text is then turned into a Sonos command. We do not store
+              audio recordings.
+            </p>
+            <div className="card-actions consent-actions">
+              <button className="btn btn-orange" onClick={grantConsent}>
+                I understand
+              </button>
+              <a href="/privacy" className="btn btn-outline">Read full privacy notice</a>
+            </div>
+          </Card>
+        )}
 
         {/* Transcript Card */}
         <Card title="Live Transcript">
@@ -423,6 +240,10 @@ export default function App() {
             ))
           )}
         </Card>
+
+        <footer className="footnote app-footer">
+          <a href="/privacy" className="footer-link">Privacy notice</a>
+        </footer>
       </div>
     </div>
   );

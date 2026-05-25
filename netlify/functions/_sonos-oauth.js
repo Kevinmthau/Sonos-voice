@@ -1,6 +1,5 @@
 const crypto = require("crypto");
 
-const DEFAULT_CLIENT_ID = "ae97b2cd-64bf-472c-9d0f-0ecac953b1dd";
 const DEFAULT_REDIRECT_URI = "https://sonos-voice.netlify.app/sonos/oauth/callback";
 const DEFAULT_IOS_CALLBACK_URL = "sonosvoiceremote://oauth/callback";
 const DEFAULT_WEB_CALLBACK_URL = "/";
@@ -70,7 +69,7 @@ function verifySignedState(state, secret) {
 }
 
 function createAuthorizeURL(options = {}) {
-  const clientID = optionalEnv("SONOS_CLIENT_ID", DEFAULT_CLIENT_ID);
+  const clientID = env("SONOS_CLIENT_ID");
   const redirectURI = options.redirectURI || optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
   const stateSecret = env("SONOS_STATE_SECRET");
   const state = createSignedState(stateSecret, options.statePayload);
@@ -84,17 +83,10 @@ function createAuthorizeURL(options = {}) {
   return url.toString();
 }
 
-async function exchangeAuthorizationCode(code, redirectURIOverride) {
-  const clientID = optionalEnv("SONOS_CLIENT_ID", DEFAULT_CLIENT_ID);
+async function postToTokenEndpoint(body) {
+  const clientID = env("SONOS_CLIENT_ID");
   const clientSecret = env("SONOS_CLIENT_SECRET");
-  const redirectURI = redirectURIOverride || optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
-
   const credentials = Buffer.from(`${clientID}:${clientSecret}`, "utf8").toString("base64");
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: redirectURI
-  });
 
   const response = await fetch(SONOS_TOKEN_URL, {
     method: "POST",
@@ -107,11 +99,34 @@ async function exchangeAuthorizationCode(code, redirectURIOverride) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = payload.error_description || payload.error || "Sonos token exchange failed.";
-    throw new Error(detail);
+    const detail = payload.error_description || payload.error || "Sonos token request failed.";
+    const err = new Error(detail);
+    err.status = response.status;
+    throw err;
   }
 
   return payload;
+}
+
+async function exchangeAuthorizationCode(code, redirectURIOverride) {
+  const redirectURI = redirectURIOverride || optionalEnv("SONOS_REDIRECT_URI", DEFAULT_REDIRECT_URI);
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectURI
+  });
+  return postToTokenEndpoint(body);
+}
+
+async function exchangeRefreshToken(refreshToken) {
+  if (!refreshToken) {
+    throw new Error("Missing refresh token.");
+  }
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken
+  });
+  return postToTokenEndpoint(body);
 }
 
 function appCallbackURL() {
@@ -141,14 +156,15 @@ function errorRedirect(error, description = error) {
 }
 
 module.exports = {
-  DEFAULT_CLIENT_ID,
   DEFAULT_REDIRECT_URI,
+  SONOS_TOKEN_URL,
   appCallbackURL,
   createAuthorizeURL,
   createSignedState,
   env,
   errorRedirect,
   exchangeAuthorizationCode,
+  exchangeRefreshToken,
   optionalEnv,
   redirectResponse,
   verifySignedState,

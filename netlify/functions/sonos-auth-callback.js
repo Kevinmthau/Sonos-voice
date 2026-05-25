@@ -7,9 +7,29 @@ const {
   webCallbackURL
 } = require("./_sonos-oauth");
 
+function callbackHost(event) {
+  return event.headers?.host || event.headers?.Host || "localhost";
+}
+
+function callbackPath(event) {
+  if (event.path) return event.path;
+  if (event.rawUrl) {
+    try {
+      return new URL(event.rawUrl).pathname;
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function isWebCallback(statePayload, event) {
+  return statePayload?.target === "web" || callbackPath(event).includes("/callback/web");
+}
+
 function callbackURLForState(statePayload, event) {
-  return statePayload?.target === "web"
-    ? new URL(webCallbackURL(), `https://${event.headers.host}`)
+  return isWebCallback(statePayload, event)
+    ? new URL(webCallbackURL(), `https://${callbackHost(event)}`)
     : new URL(appCallbackURL());
 }
 

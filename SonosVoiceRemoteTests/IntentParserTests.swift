@@ -109,4 +109,53 @@ final class IntentParserTests: XCTestCase {
         XCTAssertEqual(intent?.action, .resume)
         XCTAssertEqual(intent?.targetRoom, "Bedroom")
     }
+
+    func testSharedFixtures() throws {
+        let fixture = try SharedIntentFixture.load()
+        let fixtureRooms = fixture.rooms.map { SonosRoom(name: $0) }
+
+        for testCase in fixture.cases {
+            let selectedRoom = fixtureRooms.first(where: { $0.name == testCase.selectedRoom })
+            let intent = parser.parse(testCase.transcript, availableRooms: fixtureRooms, selectedRoom: selectedRoom)
+
+            if let expected = testCase.expected {
+                XCTAssertEqual(intent?.originalTranscript, testCase.transcript, testCase.name)
+                XCTAssertEqual(intent?.action.rawValue, expected.action, testCase.name)
+                XCTAssertEqual(intent?.targetRoom, expected.targetRoom, testCase.name)
+                XCTAssertEqual(intent?.contentQuery, expected.contentQuery, testCase.name)
+                XCTAssertEqual(intent?.volumeValue, expected.volumeValue, testCase.name)
+                XCTAssertEqual(intent?.scope.rawValue, expected.scope, testCase.name)
+            } else {
+                XCTAssertNil(intent, testCase.name)
+            }
+        }
+    }
+}
+
+private struct SharedIntentFixture: Decodable {
+    let rooms: [String]
+    let cases: [SharedIntentCase]
+
+    static func load() throws -> SharedIntentFixture {
+        let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let repositoryRoot = testsDirectory.deletingLastPathComponent()
+        let fixtureURL = repositoryRoot.appendingPathComponent("shared/intent-parser-fixtures.json")
+        let data = try Data(contentsOf: fixtureURL)
+        return try JSONDecoder().decode(SharedIntentFixture.self, from: data)
+    }
+}
+
+private struct SharedIntentCase: Decodable {
+    let name: String
+    let transcript: String
+    let selectedRoom: String
+    let expected: SharedExpectedIntent?
+}
+
+private struct SharedExpectedIntent: Decodable {
+    let action: String
+    let targetRoom: String?
+    let contentQuery: String?
+    let volumeValue: Int?
+    let scope: String
 }

@@ -3,6 +3,13 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Content-Type-Options = "nosniff"
+
 # Web OAuth flow
 [[redirects]]
   from = "/sonos/oauth/start/web"
@@ -11,7 +18,7 @@
 
 [[redirects]]
   from = "/sonos/oauth/callback/web"
-  to = "/.netlify/functions/sonos-auth-callback-web"
+  to = "/.netlify/functions/sonos-auth-callback"
   status = 200
 
 # iOS OAuth flow (preserved)
@@ -29,6 +36,12 @@
 [[redirects]]
   from = "/sonos/events"
   to = "/.netlify/functions/sonos-events"
+  status = 200
+
+# Sonos token refresh (must be matched before /api/sonos)
+[[redirects]]
+  from = "/api/sonos/refresh"
+  to = "/.netlify/functions/sonos-refresh"
   status = 200
 
 # Sonos API proxy

@@ -35,6 +35,10 @@
     <string>SonosVoiceRemote uses the microphone to capture tap-to-talk voice commands.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>SonosVoiceRemote uses speech recognition to interpret natural-language Sonos commands.</string>
+    <key>SonosAuthorizationStartURL</key>
+    <string>$(SONOS_AUTH_START_URL)</string>
+    <key>SonosClientID</key>
+    <string>$(SONOS_CLIENT_ID)</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
