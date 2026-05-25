@@ -94,6 +94,7 @@ Apple notes that Xcode Cloud builds may still need to be manually added to inter
 - This project does not need Xcode Cloud custom build scripts right now because it has no CocoaPods, Carthage, Swift Package, or other native dependency install step.
 - Xcode Cloud manages cloud build numbers. If App Store Connect reports a duplicate build number, set the next Xcode Cloud build number in App Store Connect or bump `CURRENT_PROJECT_VERSION` before starting the next archive.
 - The app embeds the Sonos OAuth start URL and client ID through build settings. Do not put Sonos client secrets, access tokens, or refresh tokens in Xcode Cloud environment variables for a TestFlight app.
+- Export-compliance is declared in `SonosVoiceRemote/Support/Info.plist` via `ITSAppUsesNonExemptEncryption = false`, so every Xcode Cloud archive uploads to TestFlight without prompting for an encryption questionnaire. If the app ever adds non-exempt encryption (custom crypto beyond Apple's HTTPS/Keychain APIs), flip that key and supply the matching compliance docs.
 
 ## References
 
