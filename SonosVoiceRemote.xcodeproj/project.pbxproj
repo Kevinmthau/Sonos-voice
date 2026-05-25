@@ -31,6 +31,7 @@
 		300000000000000000000014 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000014 /* AppLogger.swift */; };
 		300000000000000000000015 /* IntentParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000015 /* IntentParserTests.swift */; };
 		300000000000000000000016 /* VoiceRemoteViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000016 /* VoiceRemoteViewModelTests.swift */; };
+		300000000000000000000026 /* intent-parser-fixtures.json in Resources */ = {isa = PBXBuildFile; fileRef = 200000000000000000000028 /* intent-parser-fixtures.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +71,7 @@
 		200000000000000000000016 /* VoiceRemoteViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRemoteViewModelTests.swift; sourceTree = "<group>"; };
 		200000000000000000000017 /* SonosVoiceRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonosVoiceRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		200000000000000000000018 /* SonosVoiceRemoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonosVoiceRemoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		200000000000000000000028 /* intent-parser-fixtures.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "shared/intent-parser-fixtures.json"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -188,6 +190,7 @@
 			children = (
 				200000000000000000000015 /* IntentParserTests.swift */,
 				200000000000000000000016 /* VoiceRemoteViewModelTests.swift */,
+				200000000000000000000028 /* intent-parser-fixtures.json */,
 			);
 			path = SonosVoiceRemoteTests;
 			sourceTree = "<group>";
@@ -315,6 +318,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				300000000000000000000026 /* intent-parser-fixtures.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

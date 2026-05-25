@@ -137,6 +137,14 @@ private struct SharedIntentFixture: Decodable {
     let cases: [SharedIntentCase]
 
     static func load() throws -> SharedIntentFixture {
+        if let bundledFixtureURL = Bundle(for: IntentParserTests.self).url(
+            forResource: "intent-parser-fixtures",
+            withExtension: "json"
+        ) {
+            let data = try Data(contentsOf: bundledFixtureURL)
+            return try JSONDecoder().decode(SharedIntentFixture.self, from: data)
+        }
+
         let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let repositoryRoot = testsDirectory.deletingLastPathComponent()
         let fixtureURL = repositoryRoot.appendingPathComponent("shared/intent-parser-fixtures.json")
