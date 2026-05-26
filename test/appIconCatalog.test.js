@@ -8,6 +8,21 @@ const catalogURL = new URL(
 );
 const catalogDirURL = new URL('./', catalogURL);
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const expectedIconSlots = [
+  { idiom: 'iphone', size: '20x20', scale: '2x' },
+  { idiom: 'iphone', size: '20x20', scale: '3x' },
+  { idiom: 'iphone', size: '29x29', scale: '2x' },
+  { idiom: 'iphone', size: '29x29', scale: '3x' },
+  { idiom: 'iphone', size: '40x40', scale: '2x' },
+  { idiom: 'iphone', size: '40x40', scale: '3x' },
+  { idiom: 'iphone', size: '60x60', scale: '2x' },
+  { idiom: 'iphone', size: '60x60', scale: '3x' },
+  { idiom: 'ios-marketing', size: '1024x1024', scale: '1x' },
+];
+
+function slotKey({ idiom, size, scale }) {
+  return `${idiom} ${size} ${scale}`;
+}
 
 function expectedPixels({ size, scale }) {
   const [width, height] = size.split('x').map(Number);
@@ -32,9 +47,14 @@ function readPngInfo(iconURL) {
 
 test('app icon catalog references a complete opaque PNG set', () => {
   const catalog = JSON.parse(readFileSync(catalogURL, 'utf8'));
+  const actualSlots = catalog.images.map(slotKey).sort();
+  const expectedSlots = expectedIconSlots.map(slotKey).sort();
 
-  for (const image of catalog.images) {
-    const label = `${image.idiom} ${image.size} ${image.scale}`;
+  assert.deepEqual(actualSlots, expectedSlots, 'catalog must contain exactly the required app icon slots');
+
+  for (const expectedSlot of expectedIconSlots) {
+    const label = slotKey(expectedSlot);
+    const image = catalog.images.find((catalogImage) => slotKey(catalogImage) === label);
 
     assert.ok(image.filename, `${label} must reference a file`);
 
