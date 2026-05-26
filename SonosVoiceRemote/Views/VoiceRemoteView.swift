@@ -107,33 +107,10 @@ struct VoiceRemoteView: View {
     private var roomSelector: some View {
         GlassPanel(cornerRadius: 28, padding: 18) {
             VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Selected Room")
-                            .font(.system(.caption, design: .rounded).weight(.semibold))
-                            .foregroundStyle(Color.remoteMutedText)
-                        Text(viewModel.selectedRoomName)
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.remoteText)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.78)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    if viewModel.rooms.count > 1 {
-                        Picker("Room", selection: Binding(
-                            get: { viewModel.selectedRoomID },
-                            set: { viewModel.updateSelectedRoom(id: $0) }
-                        )) {
-                            ForEach(viewModel.rooms) { room in
-                                Text(room.name).tag(room.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(Color.accentBlue)
-                    }
-                }
+                Text("Selected Room")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Color.remoteMutedText)
+                    .accessibilityValue(viewModel.selectedRoomName)
 
                 if viewModel.rooms.isEmpty {
                     Text("No Sonos rooms discovered yet.")
@@ -473,6 +450,7 @@ private struct RoomChipButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Select \(title)")
+        .accessibilityValue(isSelected ? "Selected room" : "Not selected")
     }
 }
 
