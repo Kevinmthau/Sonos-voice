@@ -1,11 +1,5 @@
 import Foundation
 
-enum SpeechRecognitionMode: String, CaseIterable {
-    case apple
-    case openai
-    case auto
-}
-
 enum SpeechPermissionState: Equatable {
     case unknown
     case granted
@@ -15,13 +9,13 @@ enum SpeechPermissionState: Equatable {
     var statusMessage: String {
         switch self {
         case .unknown:
-            return "Microphone and speech permissions have not been requested yet."
+            return "Microphone permission has not been requested yet."
         case .granted:
-            return "Microphone and speech recognition are available."
+            return "Microphone access is available."
         case .denied:
-            return "Microphone or speech recognition access was denied."
+            return "Microphone access was denied."
         case .restricted:
-            return "Speech recognition is restricted on this device."
+            return "Microphone access is restricted on this device."
         }
     }
 }
@@ -29,14 +23,17 @@ enum SpeechPermissionState: Equatable {
 enum SpeechRecognizerError: LocalizedError {
     case recognizerUnavailable
     case permissionsDenied
+    case missingOpenAIAPIKey
     case audioSessionFailure(String)
 
     var errorDescription: String? {
         switch self {
         case .recognizerUnavailable:
-            return "Speech recognition is unavailable right now."
+            return "Voice transcription is unavailable right now."
         case .permissionsDenied:
-            return "Speech recognition needs microphone and speech permissions."
+            return "Voice transcription needs microphone permission."
+        case .missingOpenAIAPIKey:
+            return "Add an OpenAI API key in Settings before using voice transcription."
         case .audioSessionFailure(let details):
             return details
         }
@@ -55,4 +52,8 @@ protocol SpeechRecognizing: AnyObject {
     ) async throws
     func stopTranscribing() async throws -> String?
     func cancelTranscribing()
+}
+
+protocol VoiceCommandContextUpdating: AnyObject {
+    func updateCommandContext(roomNames: [String])
 }

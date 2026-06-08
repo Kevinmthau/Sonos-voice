@@ -15,20 +15,33 @@ final class VoiceRemoteViewModel: ObservableObject {
     @Published private(set) var isExecuting = false
     @Published private(set) var isTranscribing = false
     @Published private(set) var permissionState: SpeechPermissionState = .unknown
+    @Published private(set) var spotifyConnectionState = SpotifyConnectionState.authenticationRequired("Checking Spotify connection...")
+    @Published private(set) var hasOpenAIAPIKey = false
 
     private let speechRecognizer: any SpeechRecognizing
-    private let sonosController: any SonosControlling
     private let intentParser: any IntentParsing
+    private let connectionCoordinator: ConnectionCoordinator
+    private let voiceCommandCoordinator: VoiceCommandCoordinator
     private var hasLoaded = false
 
     init(
         speechRecognizer: any SpeechRecognizing,
         sonosController: any SonosControlling,
-        intentParser: any IntentParsing
+        musicPlaybackService: any MusicPlaybackServicing,
+        intentParser: any IntentParsing,
+        openAIAPIKeyStore: any OpenAIAPIKeyStoring = OpenAIAPIKeyStore()
     ) {
         self.speechRecognizer = speechRecognizer
-        self.sonosController = sonosController
         self.intentParser = intentParser
+        self.connectionCoordinator = ConnectionCoordinator(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService,
+            openAIAPIKeyStore: openAIAPIKeyStore
+        )
+        self.voiceCommandCoordinator = VoiceCommandCoordinator(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
     }
 
     var selectedRoom: SonosRoom? {
@@ -59,6 +72,10 @@ final class VoiceRemoteViewModel: ObservableObject {
         connectionState.authorizationURL
     }
 
+    var spotifyStatusText: String {
+        spotifyConnectionState.status.displayName
+    }
+
     var roomSummaryText: String {
         if rooms.isEmpty {
             return "No Sonos rooms discovered yet."
@@ -72,7 +89,8 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     var transcriptionSummaryText: String {
-        "\(speechRecognizer.sourceDescription). \(permissionState.statusMessage)"
+        let keyStatus = hasOpenAIAPIKey ? "OpenAI key saved." : "OpenAI key missing."
+        return "\(speechRecognizer.sourceDescription). \(permissionState.statusMessage) \(keyStatus)"
     }
 
     var isMicrophoneToggleDisabled: Bool {
@@ -83,18 +101,20 @@ final class VoiceRemoteViewModel: ObservableObject {
         guard !hasLoaded else { return }
         hasLoaded = true
         appendLog("App started with the real Sonos controller.")
+        refreshOpenAIAPIKeyState()
         permissionState = await speechRecognizer.currentPermissionState()
         await refreshConnection()
         await refreshRooms()
+        await refreshSpotifyConnection(updateStatus: false)
     }
 
     func refreshConnection() async {
-        let state = await sonosController.connectionState()
+        let state = await connectionCoordinator.sonosConnectionState()
         applyConnectionState(state)
     }
 
     func refreshRooms() async {
-        let state = await sonosController.connectionState()
+        let state = await connectionCoordinator.sonosConnectionState()
         applyConnectionState(state, updateStatus: false)
 
         guard state.isReady else {
@@ -106,8 +126,9 @@ final class VoiceRemoteViewModel: ObservableObject {
         }
 
         do {
-            let discoveredRooms = try await sonosController.discoverRooms()
+            let discoveredRooms = try await connectionCoordinator.discoverRooms()
             rooms = discoveredRooms.sorted { $0.name < $1.name }
+            updateSpeechCommandContext()
 
             if selectedRoomID.isEmpty || rooms.contains(where: { $0.id == selectedRoomID }) == false {
                 selectedRoomID = rooms.first?.id ?? ""
@@ -123,9 +144,28 @@ final class VoiceRemoteViewModel: ObservableObject {
         }
     }
 
+    func saveOpenAIAPIKey(_ apiKey: String) {
+        connectionCoordinator.saveOpenAIAPIKey(apiKey)
+        refreshOpenAIAPIKeyState()
+        statusText = hasOpenAIAPIKey ? "OpenAI API key saved." : "OpenAI API key cleared."
+        appendLog(statusText)
+    }
+
+    func clearOpenAIAPIKey() {
+        connectionCoordinator.clearOpenAIAPIKey()
+        refreshOpenAIAPIKeyState()
+        statusText = "OpenAI API key cleared."
+        appendLog(statusText)
+    }
+
+    func refreshSpotifyConnection(updateStatus: Bool = false) async {
+        let state = await connectionCoordinator.spotifyConnectionState()
+        applySpotifyConnectionState(state, updateStatus: updateStatus)
+    }
+
     func connectSonos() async {
         do {
-            let state = try await sonosController.connect()
+            let state = try await connectionCoordinator.connectSonos()
             applyConnectionState(state)
             statusText = state.detail
             appendLog(state.detail)
@@ -133,13 +173,13 @@ final class VoiceRemoteViewModel: ObservableObject {
         } catch {
             statusText = error.localizedDescription
             appendLog("Sonos connection failed: \(error.localizedDescription)")
-            let state = await sonosController.connectionState()
+            let state = await connectionCoordinator.sonosConnectionState()
             applyConnectionState(state, updateStatus: false)
         }
     }
 
     func disconnectSonos() async {
-        let state = await sonosController.disconnect()
+        let state = await connectionCoordinator.disconnectSonos()
         rooms = []
         selectedRoomID = ""
         applyConnectionState(state)
@@ -147,9 +187,30 @@ final class VoiceRemoteViewModel: ObservableObject {
         appendLog(state.detail)
     }
 
+    func connectSpotify() async {
+        do {
+            statusText = "Starting Spotify sign-in..."
+            let state = try await connectionCoordinator.connectSpotify()
+            applySpotifyConnectionState(state)
+            statusText = "Spotify authorization completed."
+            appendLog(statusText)
+        } catch {
+            statusText = error.localizedDescription
+            appendLog("Spotify authorization failed: \(error.localizedDescription)")
+            await refreshSpotifyConnection(updateStatus: false)
+        }
+    }
+
+    func disconnectSpotify() async {
+        let state = await connectionCoordinator.disconnectSpotify()
+        applySpotifyConnectionState(state)
+        statusText = state.detail
+        appendLog(state.detail)
+    }
+
     func updateSelectedHousehold(id: String) async {
         do {
-            let state = try await sonosController.selectHousehold(id: id)
+            let state = try await connectionCoordinator.selectHousehold(id: id)
             applyConnectionState(state)
             appendLog("Selected Sonos household: \(state.selectedHouseholdName)")
             await refreshRooms()
@@ -160,8 +221,22 @@ final class VoiceRemoteViewModel: ObservableObject {
     }
 
     func handleIncomingURL(_ url: URL) async {
+        if connectionCoordinator.canHandleSpotifyCallback(url) {
+            do {
+                let state = try await connectionCoordinator.handleSpotifyCallback(url)
+                applySpotifyConnectionState(state)
+                statusText = "Spotify authorization completed."
+                appendLog(statusText)
+            } catch {
+                statusText = error.localizedDescription
+                appendLog("Spotify authorization failed: \(error.localizedDescription)")
+                await refreshSpotifyConnection(updateStatus: false)
+            }
+            return
+        }
+
         do {
-            let state = try await sonosController.handleAuthorizationCallback(url)
+            let state = try await connectionCoordinator.handleSonosCallback(url)
             applyConnectionState(state)
             statusText = "Sonos authorization completed."
             appendLog(statusText)
@@ -169,7 +244,7 @@ final class VoiceRemoteViewModel: ObservableObject {
         } catch {
             statusText = error.localizedDescription
             appendLog("Sonos authorization failed: \(error.localizedDescription)")
-            let state = await sonosController.connectionState()
+            let state = await connectionCoordinator.sonosConnectionState()
             applyConnectionState(state, updateStatus: false)
         }
     }
@@ -242,6 +317,7 @@ final class VoiceRemoteViewModel: ObservableObject {
         transcript = ""
         parsedIntent = nil
         statusText = speechRecognizer.usesDeferredTranscription ? "Recording command..." : "Listening..."
+        updateSpeechCommandContext()
 
         do {
             try await speechRecognizer.startTranscribing(
@@ -330,68 +406,32 @@ final class VoiceRemoteViewModel: ObservableObject {
         appendLog("Executing intent: \(intent.summary)")
 
         do {
-            let result = try await perform(intent)
+            let result = try await voiceCommandCoordinator.perform(
+                intent,
+                rooms: rooms,
+                selectedRoom: selectedRoom
+            )
             mergeUpdatedRooms(result.updatedRooms)
+            if let spotifyState = voiceCommandCoordinator.takePendingSpotifyConnectionState() {
+                applySpotifyConnectionState(spotifyState, updateStatus: false)
+            }
             statusText = result.message
             appendLog(result.message)
         } catch {
             statusText = error.localizedDescription
             appendLog("Execution failed: \(error.localizedDescription)")
+            if let spotifyState = await voiceCommandCoordinator.refreshSpotifyConnectionIfAuthenticationRequired(error) {
+                applySpotifyConnectionState(spotifyState, updateStatus: false)
+            }
         }
 
         isExecuting = false
     }
 
-    private func perform(_ intent: ParsedVoiceIntent) async throws -> SonosCommandResult {
-        let resolvedRoom = resolveRoom(named: intent.targetRoom)
-
-        switch intent.action {
-        case .play:
-            if intent.scope == .allRooms {
-                return try await sonosController.playEverywhere(query: intent.contentQuery)
-            }
-            return try await sonosController.play(room: resolvedRoom, query: intent.contentQuery)
-
-        case .pause:
-            if intent.scope == .allRooms {
-                return try await sonosController.pauseEverywhere()
-            }
-            return try await sonosController.pause(room: resolvedRoom)
-
-        case .resume:
-            if intent.scope == .allRooms {
-                return try await sonosController.playEverywhere(query: nil)
-            }
-            return try await sonosController.resume(room: resolvedRoom)
-
-        case .skip:
-            return try await sonosController.skip(room: resolvedRoom)
-
-        case .volumeUp:
-            return try await sonosController.volumeUp(room: resolvedRoom)
-
-        case .volumeDown:
-            return try await sonosController.volumeDown(room: resolvedRoom)
-
-        case .setVolume:
-            return try await sonosController.setVolume(room: resolvedRoom, value: intent.volumeValue ?? 20)
-
-        case .groupAll:
-            return try await sonosController.playEverywhere(query: intent.contentQuery)
-        }
-    }
-
-    private func resolveRoom(named roomName: String?) -> SonosRoom? {
-        guard let roomName else {
-            return selectedRoom
-        }
-
-        return rooms.first(where: { $0.name.caseInsensitiveCompare(roomName) == .orderedSame }) ?? selectedRoom
-    }
-
     private func mergeUpdatedRooms(_ updatedRooms: [SonosRoom]) {
         guard !updatedRooms.isEmpty else { return }
         rooms = updatedRooms.sorted { $0.name < $1.name }
+        updateSpeechCommandContext()
         if rooms.contains(where: { $0.id == selectedRoomID }) == false {
             selectedRoomID = rooms.first?.id ?? ""
         }
@@ -404,6 +444,22 @@ final class VoiceRemoteViewModel: ObservableObject {
         if updateStatus {
             statusText = state.detail
         }
+    }
+
+    private func applySpotifyConnectionState(_ state: SpotifyConnectionState, updateStatus: Bool = true) {
+        spotifyConnectionState = state
+
+        if updateStatus {
+            statusText = state.detail
+        }
+    }
+
+    private func refreshOpenAIAPIKeyState() {
+        hasOpenAIAPIKey = connectionCoordinator.hasOpenAIAPIKey()
+    }
+
+    private func updateSpeechCommandContext() {
+        (speechRecognizer as? VoiceCommandContextUpdating)?.updateCommandContext(roomNames: rooms.map(\.name))
     }
 
     private func appendLog(_ message: String) {

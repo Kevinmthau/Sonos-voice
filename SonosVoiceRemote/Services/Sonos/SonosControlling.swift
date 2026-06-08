@@ -49,6 +49,7 @@ protocol SonosControlling {
     func setVolume(room: SonosRoom?, value: Int) async throws -> SonosCommandResult
     func volumeUp(room: SonosRoom?) async throws -> SonosCommandResult
     func volumeDown(room: SonosRoom?) async throws -> SonosCommandResult
+    func groupEverywhere() async throws -> SonosCommandResult
     func playEverywhere(query: String?) async throws -> SonosCommandResult
     func pauseEverywhere() async throws -> SonosCommandResult
 }

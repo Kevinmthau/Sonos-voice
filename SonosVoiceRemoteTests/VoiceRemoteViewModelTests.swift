@@ -175,41 +175,240 @@ final class VoiceRemoteViewModelTests: XCTestCase {
         XCTAssertEqual(finalCounts.setVolume, 0)
     }
 
-    func testVoiceTranscriptionConfigurationDefaultsToApple() {
-        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([:])
+    func testContentQueryUsesSpotifyPlaybackForSelectedRoom() async {
+        let musicPlaybackService = TestMusicPlaybackService()
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
 
-        XCTAssertEqual(configuration.mode, .apple)
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        XCTAssertEqual(viewModel.parsedIntent?.action, .play)
+        XCTAssertEqual(musicPlaybackService.preparedQueries, ["miles davis"])
+        XCTAssertEqual(musicPlaybackService.preparedRoomNames, ["Kitchen"])
+        XCTAssertEqual(musicPlaybackService.startedDeviceIDs, ["spotify-kitchen"])
+
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.play, 0)
+        XCTAssertEqual(counts.playEverywhere, 0)
+
+        let kitchen = viewModel.rooms.first(where: { $0.name == "Kitchen" })
+        XCTAssertTrue(kitchen?.isPlaying == true)
+        XCTAssertEqual(kitchen?.currentContent, "So What - Miles Davis")
+        XCTAssertTrue(viewModel.statusText.contains("So What"))
+    }
+
+    func testNoSpotifyAuthReturnsSignInStatusAndDoesNotCallSonosPlayback() async {
+        let musicPlaybackService = TestMusicPlaybackService(
+            state: .authenticationRequired("Sign in to Spotify before searching music.")
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        XCTAssertEqual(viewModel.statusText, "Sign in to Spotify before searching music.")
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.play, 0)
+        XCTAssertEqual(counts.playEverywhere, 0)
+    }
+
+    func testSpotifyPlaybackAuthenticationFailureRefreshesSpotifyConnectionState() async {
+        let signedOutState = SpotifyConnectionState.authenticationRequired("Sign in to Spotify before searching music.")
+        let musicPlaybackService = TestMusicPlaybackService(
+            playbackError: SpotifyPlaybackError.authenticationRequired(signedOutState.detail),
+            stateAfterAuthenticationError: signedOutState
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+        XCTAssertEqual(viewModel.spotifyConnectionState.status, .connected)
+
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        XCTAssertEqual(viewModel.statusText, signedOutState.detail)
+        XCTAssertEqual(viewModel.spotifyConnectionState, signedOutState)
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.play, 0)
+        XCTAssertEqual(counts.playEverywhere, 0)
+    }
+
+    func testNoMatchingSpotifyConnectDeviceReturnsActionableMessage() async {
+        let musicPlaybackService = TestMusicPlaybackService(
+            playbackError: SpotifyPlaybackError.noMatchingDevice(
+                roomName: "Kitchen",
+                availableDeviceNames: ["Living Room"]
+            )
+        )
+        let viewModel = makeViewModel(musicPlaybackService: musicPlaybackService)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        XCTAssertTrue(viewModel.statusText.contains("Kitchen is not available as a Spotify Connect device"))
+        XCTAssertTrue(viewModel.statusText.contains("Open Spotify"))
+    }
+
+    func testSpotifyPremiumRequiredResponseSurfacesPremiumMessage() async {
+        let musicPlaybackService = TestMusicPlaybackService(playbackError: SpotifyPlaybackError.premiumRequired)
+        let viewModel = makeViewModel(musicPlaybackService: musicPlaybackService)
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        XCTAssertEqual(viewModel.statusText, "Spotify Premium is required to start playback on Spotify Connect devices.")
+    }
+
+    func testNoSearchResultsDoesNotAlterCurrentSonosPlayback() async {
+        let musicPlaybackService = TestMusicPlaybackService(
+            playbackError: SpotifyPlaybackError.noSearchResults("miles davis")
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis in Kitchen")
+
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.play, 0)
+        XCTAssertEqual(counts.playEverywhere, 0)
+
+        let kitchen = viewModel.rooms.first(where: { $0.name == "Kitchen" })
+        XCTAssertFalse(kitchen?.isPlaying == true)
+        XCTAssertNil(kitchen?.currentContent)
+    }
+
+    func testSpotifyPlaybackEverywhereValidatesSpotifyBeforeGroupingRooms() async {
+        let musicPlaybackService = TestMusicPlaybackService(
+            state: .authenticationRequired("Sign in to Spotify before searching music.")
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis everywhere")
+
+        XCTAssertEqual(viewModel.parsedIntent?.action, .groupAll)
+        XCTAssertEqual(viewModel.statusText, "Sign in to Spotify before searching music.")
+        XCTAssertEqual(musicPlaybackService.startPlaybackCallCount, 0)
+
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.playEverywhere, 0)
+        XCTAssertEqual(counts.groupEverywhere, 0)
+
+        let sonosRooms = await sonosController.currentRooms()
+        XCTAssertFalse(sonosRooms.allSatisfy { $0.groupName == "Everywhere" })
+    }
+
+    func testSpotifyPlaybackEverywhereStartFailureReturnsGroupedRooms() async {
+        let musicPlaybackService = TestMusicPlaybackService(
+            startPlaybackError: SpotifyPlaybackError.premiumRequired
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+
+        await viewModel.processTranscript("play Miles Davis everywhere")
+
+        XCTAssertEqual(musicPlaybackService.startPlaybackCallCount, 1)
+        XCTAssertTrue(viewModel.statusText.contains("Grouped all rooms, but Spotify playback failed"))
+        XCTAssertTrue(viewModel.statusText.contains("Spotify Premium is required"))
+
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.playEverywhere, 0)
+        XCTAssertEqual(counts.groupEverywhere, 1)
+        XCTAssertTrue(viewModel.rooms.allSatisfy { $0.groupName == "Everywhere" })
+    }
+
+    func testSpotifyPlaybackEverywhereStartAuthenticationFailureRefreshesSpotifyConnectionState() async {
+        let signedOutState = SpotifyConnectionState.authenticationRequired("Sign in to Spotify before searching music.")
+        let musicPlaybackService = TestMusicPlaybackService(
+            startPlaybackError: SpotifyPlaybackError.authenticationRequired(signedOutState.detail),
+            stateAfterAuthenticationError: signedOutState
+        )
+        let sonosController = TestSonosController()
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+        XCTAssertEqual(viewModel.spotifyConnectionState.status, .connected)
+
+        await viewModel.processTranscript("play Miles Davis everywhere")
+
+        XCTAssertTrue(viewModel.statusText.contains("Grouped all rooms, but Spotify playback failed"))
+        XCTAssertEqual(viewModel.spotifyConnectionState, signedOutState)
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.playEverywhere, 0)
+        XCTAssertEqual(counts.groupEverywhere, 1)
+    }
+
+    func testSpotifyPlaybackEverywhereStartsPreparedPlaybackAfterGrouping() async {
+        let musicPlaybackService = TestMusicPlaybackService()
+        let sonosController = TestSonosController(
+            playEverywhereError: SonosControllerError.transportFailure("The grouped queue had nothing to resume.")
+        )
+        let viewModel = makeViewModel(
+            sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService
+        )
+        await viewModel.loadIfNeeded()
+        XCTAssertEqual(viewModel.selectedRoom?.name, "Bedroom")
+
+        await viewModel.processTranscript("play Miles Davis everywhere")
+
+        XCTAssertEqual(viewModel.parsedIntent?.action, .groupAll)
+        XCTAssertEqual(musicPlaybackService.preparedQueries, ["miles davis"])
+        XCTAssertEqual(musicPlaybackService.preparedRoomNames, ["Bedroom"])
+        XCTAssertEqual(musicPlaybackService.startedDeviceIDs, ["spotify-bedroom"])
+        XCTAssertEqual(musicPlaybackService.startPlaybackCallCount, 1)
+
+        let counts = await sonosController.commandCounts()
+        XCTAssertEqual(counts.playEverywhere, 0)
+        XCTAssertEqual(counts.groupEverywhere, 1)
+
+        let sonosRooms = await sonosController.currentRooms()
+        XCTAssertEqual(sonosRooms.first(where: \.isCoordinator)?.name, "Kitchen")
+        XCTAssertTrue(sonosRooms.allSatisfy { $0.groupName == "Everywhere" })
+        XCTAssertTrue(viewModel.rooms.allSatisfy { $0.currentContent == "So What - Miles Davis" })
+        XCTAssertTrue(viewModel.statusText.contains("Grouped all rooms. Playing So What"))
+    }
+
+    func testVoiceTranscriptionConfigurationDefaultsToDirectOpenAI() {
+        let configuration = VoiceTranscriptionConfiguration.directOpenAI
+
         XCTAssertEqual(configuration.openAITranscriptionURL, VoiceTranscriptionConfiguration.defaultOpenAITranscriptionURL)
-        XCTAssertNil(configuration.openAITranscriptionToken)
-    }
-
-    func testVoiceTranscriptionConfigurationReadsOpenAISettings() throws {
-        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([
-            "SONOS_VOICE_TRANSCRIPTION_MODE": "openai",
-            "SONOS_OPENAI_TRANSCRIPTION_URL": "https://example.com/api/transcribe",
-            "SONOS_OPENAI_TRANSCRIPTION_TOKEN": "test-token"
-        ])
-
-        XCTAssertEqual(configuration.mode, .openai)
-        XCTAssertEqual(configuration.openAITranscriptionURL, try XCTUnwrap(URL(string: "https://example.com/api/transcribe")))
-        XCTAssertEqual(configuration.openAITranscriptionToken, "test-token")
-    }
-
-    func testVoiceTranscriptionConfigurationFallsBackForInvalidMode() {
-        let configuration = VoiceTranscriptionConfiguration.fromEnvironment([
-            "SONOS_VOICE_TRANSCRIPTION_MODE": "unknown"
-        ])
-
-        XCTAssertEqual(configuration.mode, .apple)
+        XCTAssertEqual(configuration.openAIModel, VoiceTranscriptionConfiguration.defaultOpenAIModel)
     }
 
     private func makeViewModel(
         speechRecognizer: any SpeechRecognizing = TestSpeechRecognizer(),
-        sonosController: any SonosControlling = TestSonosController()
+        sonosController: any SonosControlling = TestSonosController(),
+        musicPlaybackService: (any MusicPlaybackServicing)? = nil
     ) -> VoiceRemoteViewModel {
         VoiceRemoteViewModel(
             speechRecognizer: speechRecognizer,
             sonosController: sonosController,
+            musicPlaybackService: musicPlaybackService ?? TestMusicPlaybackService(),
             intentParser: IntentParser()
         )
     }
@@ -270,12 +469,128 @@ private final class TestSpeechRecognizer: SpeechRecognizing {
     func cancelTranscribing() { }
 }
 
+@MainActor
+private final class TestMusicPlaybackService: MusicPlaybackServicing {
+    private(set) var preparedQueries: [String] = []
+    private(set) var preparedRoomNames: [String] = []
+    private(set) var startedDeviceIDs: [String] = []
+    private(set) var startPlaybackCallCount = 0
+    private var state: SpotifyConnectionState
+    private let preparePlaybackError: Error?
+    private let startPlaybackError: Error?
+    private let stateAfterAuthenticationError: SpotifyConnectionState?
+
+    init(
+        state: SpotifyConnectionState = .connected("Spotify is connected for tests."),
+        playbackError: Error? = nil,
+        preparePlaybackError: Error? = nil,
+        startPlaybackError: Error? = nil,
+        stateAfterAuthenticationError: SpotifyConnectionState? = nil
+    ) {
+        self.state = state
+        self.preparePlaybackError = preparePlaybackError ?? playbackError
+        self.startPlaybackError = startPlaybackError ?? playbackError
+        self.stateAfterAuthenticationError = stateAfterAuthenticationError
+    }
+
+    func connectionState() async -> SpotifyConnectionState {
+        state
+    }
+
+    func connect() async throws -> SpotifyConnectionState {
+        state = .connected("Spotify is connected for tests.")
+        return state
+    }
+
+    func disconnect() async -> SpotifyConnectionState {
+        state = .authenticationRequired("Sign in to Spotify for tests.")
+        return state
+    }
+
+    func canHandleAuthorizationCallback(_ url: URL) -> Bool {
+        false
+    }
+
+    func handleAuthorizationCallback(_ url: URL) async throws -> SpotifyConnectionState {
+        state
+    }
+
+    func preparePlayback(query: String, room: SonosRoom?) async throws -> PreparedMusicPlayback {
+        guard state.isConnected else {
+            throw SpotifyPlaybackError.authenticationRequired(state.detail)
+        }
+
+        if let preparePlaybackError {
+            applyAuthenticationErrorStateIfNeeded(preparePlaybackError)
+            throw preparePlaybackError
+        }
+
+        let roomName = room?.name ?? "Kitchen"
+        preparedQueries.append(query)
+        preparedRoomNames.append(roomName)
+
+        return PreparedMusicPlayback(
+            query: query,
+            roomName: roomName,
+            track: SpotifyTrack(
+                id: "track-1",
+                name: "So What",
+                uri: "spotify:track:so-what",
+                artists: ["Miles Davis"]
+            ),
+            device: SpotifyDevice(
+                id: "spotify-\(roomName.lowercased().replacingOccurrences(of: " ", with: "-"))",
+                name: roomName
+            )
+        )
+    }
+
+    func startPlayback(_ preparedPlayback: PreparedMusicPlayback) async throws -> MusicPlaybackResult {
+        startPlaybackCallCount += 1
+
+        if let startPlaybackError {
+            applyAuthenticationErrorStateIfNeeded(startPlaybackError)
+            throw startPlaybackError
+        }
+
+        if let deviceID = preparedPlayback.device.id {
+            startedDeviceIDs.append(deviceID)
+        }
+
+        return MusicPlaybackResult(
+            message: "Playing \(preparedPlayback.track.name) by Miles Davis on \(preparedPlayback.device.name).",
+            trackTitle: preparedPlayback.track.name,
+            artistName: "Miles Davis",
+            deviceName: preparedPlayback.device.name
+        )
+    }
+
+    func play(query: String, in room: SonosRoom?) async throws -> MusicPlaybackResult {
+        let preparedPlayback = try await preparePlayback(query: query, room: room)
+        return try await startPlayback(preparedPlayback)
+    }
+
+    private func applyAuthenticationErrorStateIfNeeded(_ error: Error) {
+        guard let spotifyError = error as? SpotifyPlaybackError,
+              case .authenticationRequired = spotifyError,
+              let stateAfterAuthenticationError else {
+            return
+        }
+
+        state = stateAfterAuthenticationError
+    }
+}
+
 private actor TestSonosController: SonosControlling {
     private var rooms: [SonosRoom]
     private var groups: [SonosGroup]
+    private var playCallCount = 0
     private var pauseCallCount = 0
     private var setVolumeCallCount = 0
+    private var playEverywhereCallCount = 0
+    private var groupEverywhereCallCount = 0
     private let pauseDelay: Duration
+    private let playEverywhereError: SonosControllerError?
     private let household = SonosHousehold(
         id: "test-household",
         name: "Test Household",
@@ -287,14 +602,19 @@ private actor TestSonosController: SonosControlling {
         SonosRoom(name: "Living Room", volume: 25, isCoordinator: true, groupName: "Living Room"),
         SonosRoom(name: "Bedroom", volume: 15, isCoordinator: true, groupName: "Bedroom"),
         SonosRoom(name: "Dining Room", volume: 18, isCoordinator: true, groupName: "Dining Room")
-    ], pauseDelay: Duration = .milliseconds(60)) {
+    ], pauseDelay: Duration = .milliseconds(60), playEverywhereError: SonosControllerError? = nil) {
         self.rooms = seedRooms
         self.groups = seedRooms.map { SonosGroup(id: $0.id, name: $0.name, roomNames: [$0.name]) }
         self.pauseDelay = pauseDelay
+        self.playEverywhereError = playEverywhereError
     }
 
-    func commandCounts() -> (pause: Int, setVolume: Int) {
-        (pauseCallCount, setVolumeCallCount)
+    func commandCounts() -> (pause: Int, setVolume: Int, play: Int, playEverywhere: Int, groupEverywhere: Int) {
+        (pauseCallCount, setVolumeCallCount, playCallCount, playEverywhereCallCount, groupEverywhereCallCount)
+    }
+
+    func currentRooms() -> [SonosRoom] {
+        rooms
     }
 
     func connectionState() async -> SonosConnectionState {
@@ -331,6 +651,7 @@ private actor TestSonosController: SonosControlling {
     }
 
     func play(room: SonosRoom?, query: String?) async throws -> SonosCommandResult {
+        playCallCount += 1
         let target = try resolveRoom(from: room)
         try await Task.sleep(for: .milliseconds(80))
 
@@ -447,7 +768,29 @@ private actor TestSonosController: SonosControlling {
         )
     }
 
+    func groupEverywhere() async throws -> SonosCommandResult {
+        groupEverywhereCallCount += 1
+        try await Task.sleep(for: .milliseconds(90))
+
+        let currentRooms = rooms
+        groups = [SonosGroup(id: "everywhere", name: "Everywhere", roomNames: currentRooms.map(\.name))]
+
+        rooms = currentRooms.map { room in
+            var updated = room
+            updated.groupName = "Everywhere"
+            updated.isCoordinator = room.name == currentRooms.first?.name
+            return updated
+        }
+
+        return SonosCommandResult(message: "Test Sonos grouped all rooms.", updatedRooms: rooms)
+    }
+
     func playEverywhere(query: String?) async throws -> SonosCommandResult {
+        playEverywhereCallCount += 1
+        if let playEverywhereError {
+            throw playEverywhereError
+        }
+
         try await Task.sleep(for: .milliseconds(90))
 
         let currentRooms = rooms

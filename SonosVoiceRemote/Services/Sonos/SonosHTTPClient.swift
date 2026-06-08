@@ -4,6 +4,7 @@ struct SonosHTTPClient: Sendable {
     let configuration: RealSonosConfiguration
     let session: URLSession
     let tokenStore: SonosTokenStore
+    let refreshTokens: (@Sendable (String) async throws -> StoredAuthTokens)?
 
     func sendNoContent(path: String, method: String) async throws {
         let _: SonosEmptyResponse = try await send(path: path, method: method)
@@ -100,10 +101,6 @@ struct SonosHTTPClient: Sendable {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        if let clientID = configuration.clientID, !clientID.isEmpty {
-            request.setValue(clientID, forHTTPHeaderField: "X-Sonos-Api-Key")
-        }
-
         if let bodyData {
             request.httpBody = bodyData
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -131,58 +128,16 @@ struct SonosHTTPClient: Sendable {
             return false
         }
 
-        guard
-            let clientID = configuration.clientID, !clientID.isEmpty,
-            let clientSecret = configuration.clientSecret, !clientSecret.isEmpty
-        else {
-            throw SonosControllerError.notConfigured(configuration.refreshConfigurationMessage)
+        guard let refreshTokens else {
+            throw SonosControllerError.authenticationRequired("Sonos tokens expired. Sign in again.")
         }
 
-        var request = URLRequest(url: configuration.authTokenURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 20
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-
-        let credentials = Data("\(clientID):\(clientSecret)".utf8).base64EncodedString()
-        request.setValue("Basic \(credentials)", forHTTPHeaderField: "Authorization")
-
-        let refreshBody = [
-            URLQueryItem(name: "grant_type", value: "refresh_token"),
-            URLQueryItem(name: "refresh_token", value: refreshToken)
-        ]
-        request.httpBody = refreshBody
-            .compactMap { item in
-                guard let value = item.value else { return nil }
-                return "\(item.name)=\(value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value)"
-            }
-            .joined(separator: "&")
-            .data(using: .utf8)
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, 200..<300 ~= httpResponse.statusCode else {
-            let detail = (try? JSONDecoder().decode(SonosAPIErrorResponse.self, from: data).detail)
-                ?? "The Sonos token refresh request failed."
-            throw SonosControllerError.authenticationRequired(detail)
-        }
-
-        let tokenResponse = try JSONDecoder().decode(SonosOAuthTokenResponse.self, from: data)
-        tokenStore.save(
-            StoredAuthTokens(
-                accessToken: tokenResponse.accessToken,
-                refreshToken: tokenResponse.refreshToken ?? refreshToken,
-                expiresAt: Date().addingTimeInterval(TimeInterval(tokenResponse.expiresIn))
-            )
-        )
+        let refreshedTokens = try await refreshTokens(refreshToken)
+        tokenStore.save(refreshedTokens)
         return true
     }
 
     private func currentTokens() -> StoredAuthTokens {
-        let storedTokens = tokenStore.load() ?? StoredAuthTokens(accessToken: nil, refreshToken: nil, expiresAt: nil)
-
-        return StoredAuthTokens(
-            accessToken: configuration.accessToken ?? storedTokens.accessToken,
-            refreshToken: configuration.refreshToken ?? storedTokens.refreshToken,
-            expiresAt: configuration.accessToken == nil ? storedTokens.expiresAt : nil
-        )
+        tokenStore.load() ?? StoredAuthTokens(accessToken: nil, refreshToken: nil, expiresAt: nil)
     }
 }

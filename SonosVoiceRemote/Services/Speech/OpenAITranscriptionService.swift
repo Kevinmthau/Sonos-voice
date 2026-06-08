@@ -1,25 +1,49 @@
 import AVFoundation
 import Foundation
 
-final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
+final class OpenAITranscriptionService: NSObject, SpeechRecognizing, VoiceCommandContextUpdating {
     private struct TranscriptionResponse: Decodable {
         let text: String?
     }
 
     private struct ErrorResponse: Decodable {
-        let error: String?
+        private struct ErrorDetail: Decodable {
+            let message: String?
+
+            init(message: String?) {
+                self.message = message
+            }
+        }
+
+        private let error: ErrorDetail?
         let message: String?
 
         var detail: String? {
-            error ?? message
+            error?.message ?? message
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case error
+            case message
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            if let stringError = try? container.decode(String.self, forKey: .error) {
+                error = ErrorDetail(message: stringError)
+            } else {
+                error = try? container.decode(ErrorDetail.self, forKey: .error)
+            }
+            message = try? container.decode(String.self, forKey: .message)
         }
     }
 
-    private let endpointURL: URL
-    private let proxyToken: String?
+    private let requestBuilder: OpenAITranscriptionRequestBuilder
+    private let apiKeyStore: any OpenAIAPIKeyStoring
     private let session: URLSession
     private var audioRecorder: AVAudioRecorder?
     private var recordingURL: URL?
+    private var roomNames: [String] = []
 
     var sourceDescription: String {
         "OpenAI transcription"
@@ -29,9 +53,16 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         true
     }
 
-    init(endpointURL: URL, proxyToken: String?, session: URLSession = .shared) {
-        self.endpointURL = endpointURL
-        self.proxyToken = proxyToken
+    init(
+        configuration: VoiceTranscriptionConfiguration,
+        apiKeyStore: any OpenAIAPIKeyStoring = OpenAIAPIKeyStore(),
+        session: URLSession = .shared
+    ) {
+        self.requestBuilder = OpenAITranscriptionRequestBuilder(
+            endpointURL: configuration.openAITranscriptionURL,
+            model: configuration.openAIModel
+        )
+        self.apiKeyStore = apiKeyStore
         self.session = session
         super.init()
     }
@@ -114,6 +145,10 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         return transcript.isEmpty ? nil : transcript
     }
 
+    func transcribeRecording(at url: URL) async throws -> String {
+        try await uploadRecording(at: url)
+    }
+
     func cancelTranscribing() {
         audioRecorder?.stop()
         audioRecorder = nil
@@ -124,23 +159,35 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         cleanupAudioSession()
     }
 
+    func updateCommandContext(roomNames: [String]) {
+        self.roomNames = roomNames
+    }
+
     private func uploadRecording(at url: URL) async throws -> String {
+        guard let apiKey = apiKeyStore.loadAPIKey() else {
+            throw SpeechRecognizerError.missingOpenAIAPIKey
+        }
+
         let audioData = try Data(contentsOf: url)
         guard !audioData.isEmpty else {
             throw SpeechRecognizerError.audioSessionFailure("No speech audio was captured.")
         }
 
-        var request = URLRequest(url: endpointURL)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 60
-        request.httpBody = audioData
-        request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
-        request.setValue(url.lastPathComponent, forHTTPHeaderField: "X-Audio-Filename")
-        if let proxyToken {
-            request.setValue("Bearer \(proxyToken)", forHTTPHeaderField: "Authorization")
+        let request = requestBuilder.makeRequest(
+            audioData: audioData,
+            filename: url.lastPathComponent,
+            apiKey: apiKey,
+            roomNames: roomNames
+        )
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .timedOut {
+            throw SpeechRecognizerError.audioSessionFailure("OpenAI transcription timed out. Try again.")
         }
 
-        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw SpeechRecognizerError.audioSessionFailure("The transcription service returned an invalid response.")
         }
@@ -148,7 +195,14 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
         guard 200..<300 ~= httpResponse.statusCode else {
             let detail = (try? JSONDecoder().decode(ErrorResponse.self, from: data).detail)
                 ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-            throw SpeechRecognizerError.audioSessionFailure("Transcription failed: \(detail)")
+            switch httpResponse.statusCode {
+            case 401:
+                throw SpeechRecognizerError.audioSessionFailure("OpenAI rejected the saved API key. Update it in Settings.")
+            case 429:
+                throw SpeechRecognizerError.audioSessionFailure("OpenAI rate limit reached. Try again shortly.")
+            default:
+                throw SpeechRecognizerError.audioSessionFailure("OpenAI transcription failed: \(detail)")
+            }
         }
 
         let decoded = try JSONDecoder().decode(TranscriptionResponse.self, from: data)
@@ -177,6 +231,95 @@ final class OpenAITranscriptionService: NSObject, SpeechRecognizing {
             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         } catch {
             AppLogger.write("Failed to deactivate audio session: \(error.localizedDescription)")
+        }
+    }
+}
+
+struct OpenAITranscriptionRequestBuilder {
+    let endpointURL: URL
+    let model: String
+
+    func makeRequest(
+        audioData: Data,
+        filename: String,
+        apiKey: String,
+        roomNames: [String],
+        boundary: String = "Boundary-\(UUID().uuidString)"
+    ) -> URLRequest {
+        var request = URLRequest(url: endpointURL)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = multipartBody(
+            audioData: audioData,
+            filename: filename,
+            boundary: boundary,
+            roomNames: roomNames
+        )
+        return request
+    }
+
+    private func multipartBody(
+        audioData: Data,
+        filename: String,
+        boundary: String,
+        roomNames: [String]
+    ) -> Data {
+        var body = Data()
+        body.appendFormField(name: "model", value: model, boundary: boundary)
+        body.appendFormField(name: "response_format", value: "json", boundary: boundary)
+        body.appendFormField(name: "prompt", value: Self.prompt(roomNames: roomNames), boundary: boundary)
+        body.appendFileField(
+            name: "file",
+            filename: filename,
+            contentType: "audio/mp4",
+            data: audioData,
+            boundary: boundary
+        )
+        body.appendString("--\(boundary)--\r\n")
+        return body
+    }
+
+    static func prompt(roomNames: [String]) -> String {
+        var fragments = [
+            "Transcribe a short voice command for a Sonos and Spotify remote.",
+            "Expected commands include play, pause, resume, skip, volume up, volume down, set volume, and play everywhere.",
+            "Return only the spoken command text."
+        ]
+
+        if !roomNames.isEmpty {
+            fragments.append("Room names: \(roomNames.joined(separator: ", ")).")
+        }
+
+        return fragments.joined(separator: " ")
+    }
+}
+
+private extension Data {
+    mutating func appendFormField(name: String, value: String, boundary: String) {
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+        appendString("\(value)\r\n")
+    }
+
+    mutating func appendFileField(
+        name: String,
+        filename: String,
+        contentType: String,
+        data: Data,
+        boundary: String
+    ) {
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n")
+        appendString("Content-Type: \(contentType)\r\n\r\n")
+        append(data)
+        appendString("\r\n")
+    }
+
+    mutating func appendString(_ value: String) {
+        if let data = value.data(using: .utf8) {
+            append(data)
         }
     }
 }

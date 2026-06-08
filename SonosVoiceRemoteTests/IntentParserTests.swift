@@ -110,21 +110,57 @@ final class IntentParserTests: XCTestCase {
         XCTAssertEqual(intent?.targetRoom, "Bedroom")
     }
 
-    func testSharedFixtures() throws {
-        let fixture = try SharedIntentFixture.load()
-        let fixtureRooms = fixture.rooms.map { SonosRoom(name: $0) }
+    func testInlineCommandContractCases() {
+        let cases: [IntentParserCase] = [
+            .init(
+                name: "pause selected room",
+                transcript: "pause",
+                selectedRoom: "Kitchen",
+                expected: .init(action: .pause, targetRoom: "Kitchen", contentQuery: nil, volumeValue: nil, scope: .singleRoom)
+            ),
+            .init(
+                name: "skip selected room",
+                transcript: "next song",
+                selectedRoom: "Living Room",
+                expected: .init(action: .skip, targetRoom: "Living Room", contentQuery: nil, volumeValue: nil, scope: .singleRoom)
+            ),
+            .init(
+                name: "volume words",
+                transcript: "turn it down in the dining room",
+                selectedRoom: "Kitchen",
+                expected: .init(action: .volumeDown, targetRoom: "Dining Room", contentQuery: nil, volumeValue: nil, scope: .singleRoom)
+            ),
+            .init(
+                name: "play content in room",
+                transcript: "play miles davis in living room",
+                selectedRoom: "Kitchen",
+                expected: .init(action: .play, targetRoom: "Living Room", contentQuery: "miles davis", volumeValue: nil, scope: .singleRoom)
+            ),
+            .init(
+                name: "play all rooms with query",
+                transcript: "play jazz in every room",
+                selectedRoom: "Kitchen",
+                expected: .init(action: .groupAll, targetRoom: nil, contentQuery: "jazz", volumeValue: nil, scope: .allRooms)
+            ),
+            .init(
+                name: "unknown command",
+                transcript: "what is the weather",
+                selectedRoom: "Kitchen",
+                expected: nil
+            )
+        ]
 
-        for testCase in fixture.cases {
-            let selectedRoom = fixtureRooms.first(where: { $0.name == testCase.selectedRoom })
-            let intent = parser.parse(testCase.transcript, availableRooms: fixtureRooms, selectedRoom: selectedRoom)
+        for testCase in cases {
+            let selectedRoom = rooms.first(where: { $0.name == testCase.selectedRoom })
+            let intent = parser.parse(testCase.transcript, availableRooms: rooms, selectedRoom: selectedRoom)
 
             if let expected = testCase.expected {
                 XCTAssertEqual(intent?.originalTranscript, testCase.transcript, testCase.name)
-                XCTAssertEqual(intent?.action.rawValue, expected.action, testCase.name)
+                XCTAssertEqual(intent?.action, expected.action, testCase.name)
                 XCTAssertEqual(intent?.targetRoom, expected.targetRoom, testCase.name)
                 XCTAssertEqual(intent?.contentQuery, expected.contentQuery, testCase.name)
                 XCTAssertEqual(intent?.volumeValue, expected.volumeValue, testCase.name)
-                XCTAssertEqual(intent?.scope.rawValue, expected.scope, testCase.name)
+                XCTAssertEqual(intent?.scope, expected.scope, testCase.name)
             } else {
                 XCTAssertNil(intent, testCase.name)
             }
@@ -132,38 +168,17 @@ final class IntentParserTests: XCTestCase {
     }
 }
 
-private struct SharedIntentFixture: Decodable {
-    let rooms: [String]
-    let cases: [SharedIntentCase]
-
-    static func load() throws -> SharedIntentFixture {
-        if let bundledFixtureURL = Bundle(for: IntentParserTests.self).url(
-            forResource: "intent-parser-fixtures",
-            withExtension: "json"
-        ) {
-            let data = try Data(contentsOf: bundledFixtureURL)
-            return try JSONDecoder().decode(SharedIntentFixture.self, from: data)
-        }
-
-        let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        let repositoryRoot = testsDirectory.deletingLastPathComponent()
-        let fixtureURL = repositoryRoot.appendingPathComponent("shared/intent-parser-fixtures.json")
-        let data = try Data(contentsOf: fixtureURL)
-        return try JSONDecoder().decode(SharedIntentFixture.self, from: data)
-    }
-}
-
-private struct SharedIntentCase: Decodable {
+private struct IntentParserCase {
     let name: String
     let transcript: String
     let selectedRoom: String
-    let expected: SharedExpectedIntent?
+    let expected: ExpectedIntent?
 }
 
-private struct SharedExpectedIntent: Decodable {
-    let action: String
+private struct ExpectedIntent {
+    let action: SonosAction
     let targetRoom: String?
     let contentQuery: String?
     let volumeValue: Int?
-    let scope: String
+    let scope: IntentScope
 }

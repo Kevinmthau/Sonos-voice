@@ -4,22 +4,29 @@ struct VoiceRemoteView: View {
     @ObservedObject var viewModel: VoiceRemoteViewModel
 
     @State private var detailsAreExpanded = false
+    @State private var settingsArePresented = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack {
-            RemoteBackground()
+        NavigationStack {
+            ZStack {
+                RemoteBackground()
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    header
-                    roomSelector
-                    voiceControl
-                    transportControls
-                    detailsSection
+                ScrollView {
+                    VStack(spacing: 16) {
+                        header
+                        roomSelector
+                        voiceControl
+                        transportControls
+                        detailsSection
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 20)
                 }
-                .padding(.horizontal, 18)
-                .padding(.vertical, 20)
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $settingsArePresented) {
+                SettingsView(viewModel: viewModel)
             }
         }
         .task {
@@ -62,6 +69,16 @@ struct VoiceRemoteView: View {
                 HStack(spacing: 8) {
                     connectionAction
 
+                    Button {
+                        settingsArePresented = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                    }
+                    .buttonStyle(GlassIconButtonStyle(tint: .remoteSecondaryText))
+                    .accessibilityLabel("Settings")
+
                     if viewModel.connectionState.status != .authenticationRequired {
                         Button {
                             Task {
@@ -82,9 +99,12 @@ struct VoiceRemoteView: View {
 
     @ViewBuilder
     private var connectionAction: some View {
-        if let authorizationURL = viewModel.authorizationURL,
-           viewModel.connectionState.status == .authenticationRequired {
-            Link(destination: authorizationURL) {
+        if viewModel.connectionState.status == .authenticationRequired {
+            Button {
+                Task {
+                    await viewModel.connectSonos()
+                }
+            } label: {
                 Label("Sign In", systemImage: "person.crop.circle.badge.checkmark")
                     .labelStyle(.titleAndIcon)
             }
@@ -287,6 +307,58 @@ struct VoiceRemoteView: View {
                         }
                     }
 
+                    DetailBlock(title: "Spotify", systemImage: "music.note") {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .center, spacing: 10) {
+                                Circle()
+                                    .fill(spotifyTint)
+                                    .frame(width: 8, height: 8)
+                                Text(viewModel.spotifyStatusText)
+                                    .font(.system(.headline, design: .rounded).weight(.semibold))
+                                    .foregroundStyle(Color.remoteText)
+                                Spacer()
+                            }
+
+                            Text(viewModel.spotifyConnectionState.detail)
+                                .foregroundStyle(Color.remoteSecondaryText)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            HStack(spacing: 10) {
+                                if viewModel.spotifyConnectionState.requiresSignIn {
+                                    Button {
+                                        Task {
+                                            await viewModel.connectSpotify()
+                                        }
+                                    } label: {
+                                        Label("Sign In", systemImage: "person.crop.circle.badge.checkmark")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(SecondaryTransportButtonStyle())
+                                } else if viewModel.spotifyConnectionState.status == .connected {
+                                    Button {
+                                        Task {
+                                            await viewModel.disconnectSpotify()
+                                        }
+                                    } label: {
+                                        Label("Disconnect", systemImage: "power")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(SecondaryTransportButtonStyle())
+                                } else {
+                                    Button {
+                                        Task {
+                                            await viewModel.refreshSpotifyConnection(updateStatus: true)
+                                        }
+                                    } label: {
+                                        Label("Refresh", systemImage: "arrow.clockwise")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(SecondaryTransportButtonStyle())
+                                }
+                            }
+                        }
+                    }
+
                     DetailBlock(title: "Microphone", systemImage: "waveform") {
                         Text(viewModel.transcriptionSummaryText)
                             .foregroundStyle(Color.remoteSecondaryText)
@@ -371,6 +443,65 @@ struct VoiceRemoteView: View {
             return "Setup needed"
         case .unavailable:
             return "Unavailable"
+        }
+    }
+
+    private var spotifyTint: Color {
+        switch viewModel.spotifyConnectionState.status {
+        case .connected:
+            return .remoteGreen
+        case .authenticationRequired, .configurationRequired:
+            return .remoteAmber
+        case .unavailable:
+            return .remoteRed
+        }
+    }
+}
+
+private struct SettingsView: View {
+    @ObservedObject var viewModel: VoiceRemoteViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var apiKey = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("OpenAI") {
+                    SecureField("API Key", text: $apiKey)
+                        .textContentType(.password)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        Text(viewModel.hasOpenAIAPIKey ? "Saved" : "Missing")
+                            .foregroundStyle(viewModel.hasOpenAIAPIKey ? Color.remoteGreen : Color.remoteAmber)
+                    }
+
+                    Button {
+                        viewModel.saveOpenAIAPIKey(apiKey)
+                        apiKey = ""
+                    } label: {
+                        Label("Save", systemImage: "key.fill")
+                    }
+
+                    Button(role: .destructive) {
+                        viewModel.clearOpenAIAPIKey()
+                        apiKey = ""
+                    } label: {
+                        Label("Clear", systemImage: "trash.fill")
+                    }
+                }
+            }
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }

@@ -80,6 +80,18 @@ final class SonosCommandService {
         try await adjustVolume(room: room, delta: -5, verb: "Lowered")
     }
 
+    func groupEverywhere() async throws -> SonosCommandResult {
+        let topology = try await topologyService.fetchTopology()
+        let playerIDs = topology.rooms.compactMap(\.playerID)
+        guard !playerIDs.isEmpty else {
+            throw SonosControllerError.transportFailure("No Sonos players were discovered in the selected household.")
+        }
+
+        _ = try await createGroup(householdID: topology.household.id, playerIDs: playerIDs)
+        let updatedRooms = try await topologyService.discoverRooms()
+        return SonosCommandResult(message: "Grouped all rooms.", updatedRooms: updatedRooms)
+    }
+
     func playEverywhere(query: String?) async throws -> SonosCommandResult {
         let topology = try await topologyService.fetchTopology()
         let playerIDs = topology.rooms.compactMap(\.playerID)
